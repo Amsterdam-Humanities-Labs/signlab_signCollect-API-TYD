@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zin API Test</title>
+    
+    <!-- React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Material UI -->
+    <script src="https://unpkg.com/@material-ui/core@4.12.4/umd/material-ui.development.js"></script>
+    
+    <!-- Material Icons -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    
+    <!-- Google Fonts -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap">
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result-card {
+            margin-bottom: 16px;
+        }
+        .video-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .video-item {
+            flex: 1;
+            min-width: 300px;
+        }
+        video {
+            width: 100%;
+            height: auto;
+        }
+        .json-viewer {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            overflow: auto;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-video-container {
+            max-width: 100%;
+            max-height: 80vh;
+        }
+        .modal-video-container video {
+            max-height: 60vh;
+        }
+        .clickable-card {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .clickable-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const {
+            AppBar, Toolbar, Typography, Container, TextField, Button, Card, CardContent,
+            CardActions, CircularProgress, Divider, Tabs, Tab, Box, Accordion, AccordionSummary,
+            AccordionDetails, IconButton, Snackbar, Paper, Grid, List, ListItem, ListItemText,
+            ListSubheader, Popper, Grow, ClickAwayListener, MenuList, MenuItem, Dialog, 
+            DialogTitle, DialogContent, DialogActions, Modal, Backdrop, Fade
+        } = MaterialUI;
+        
+        const { useState, useEffect, useCallback, useRef } = React;
+        
+        // Add a debounce function to limit API calls while typing
+        function useDebounce(value, delay) {
+            const [debouncedValue, setDebouncedValue] = useState(value);
+            
+            useEffect(() => {
+                const handler = setTimeout(() => {
+                    setDebouncedValue(value);
+                }, delay);
+                
+                return () => {
+                    clearTimeout(handler);
+                };
+            }, [value, delay]);
+            
+            return debouncedValue;
+        }
+        
+        function TabPanel(props) {
+            const { children, value, index, ...other } = props;
+            
+            return (
+                <div
+                    role="tabpanel"
+                    hidden={value !== index}
+                    id={`simple-tabpanel-${index}`}
+                    aria-labelledby={`simple-tab-${index}`}
+                    {...other}
+                >
+                    {value === index && (
+                        <Box p={3}>
+                            {children}
+                        </Box>
+                    )}
+                </div>
+            );
+        }
+        
+        function JSONViewer({ data }) {
+            return (
+                <pre className="json-viewer">
+                    {JSON.stringify(data, null, 2)}
+                </pre>
+            );
+        }
+        
+        function VideoPlayer({ src, title }) {
+            if (!src) return <Typography variant="body2">No video available</Typography>;
+            
+            return (
+                <div className="video-item">
+                    <Typography variant="subtitle2">{title}</Typography>
+                    <video controls>
+                        <source src={src} type="video/mp4" />
+                        Your browser does not support the video tag.
+                    </video>
+                </div>
+            );
+        }
+        
+        // Create VideoModal component for displaying videos
+        function VideoModal({ open, onClose, videoData, type }) {
+            const [activeVideo, setActiveVideo] = useState('videoCenter');
+            const centerRef = useRef(null);
+            const leftRef = useRef(null);
+            const rightRef = useRef(null);
+            const [touchStartX, setTouchStartX] = useState(0);
+            const [mouseStartX, setMouseStartX] = useState(0);
+            const swipeThreshold = 50;
+            
+            // Return early if no data
+            if (!videoData) return null;
+            
+            // Process what to display based on type
+            let titleText = "";
+            let contentText = "";
+            let subtitleLinks = null;
+            
+            if (type === 'zin') {
+                titleText = `Sentence ID: ${videoData.ID}`;
+                contentText = videoData.zinString || "No sentence text available";
+                
+                // Add subtitle links if available
+                if (videoData.subtitleFiles) {
+                    const subtitles = [];
+                    
+                    for (const [type, url] of Object.entries(videoData.subtitleFiles)) {
+                        if (url) {
+                            subtitles.push(
+                                <Button 
+                                    key={type} 
+                                    href={url} 
+                                    target="_blank" 
+                                    variant="outlined" 
+                                    size="small"
+                                    style={{ margin: '5px' }}
+                                >
+                                    {type} Subtitle
+                                </Button>
+                            );
+                        }
+                    }
+                    
+                    if (subtitles.length > 0) {
+                        subtitleLinks = (
+                            <Box mt={2}>
+                                <Typography variant="subtitle2">Subtitles:</Typography>
+                                <div>{subtitles}</div>
+                            </Box>
+                        );
+                    }
+                }
+            } else if (type === 'glos') {
+                titleText = `Form ID: ${videoData.id}`;
+                contentText = `Senses: ${videoData.senses || ""}`;
+            } else if (type === 'sb') {
+                titleText = `SignBank Record ID: ${videoData.id}`;
+                
+                // Parse and display Dutch senses
+                let sensesText = "";
+                if (videoData.senses_dutch) {
+                    if (typeof videoData.senses_dutch === 'object') {
+                        sensesText = Object.values(videoData.senses_dutch).join(", ");
+                    } else {
+                        // In case it's still a string
+                        try {
+                            const senses = JSON.parse(videoData.senses_dutch);
+                            sensesText = Object.values(senses).join(", ");
+                        } catch (e) {
+                            sensesText = videoData.senses_dutch;
+                        }
+                    }
+                }
+                
+                contentText = `Dutch meanings: ${sensesText}`;
+            } else if (type === 'nmm') {
+                titleText = `NMM Data ID: ${videoData.id}`;
+                contentText = `Type: ${videoData.type || ""}, Theme: ${videoData.thema || ""}`;
+            }
+            
+            // Synchronize and play/pause all videos together
+            const syncAllVideos = () => {
+                if (!centerRef.current || !leftRef.current || !rightRef.current) return;
+                
+                // Set all videos to same time point
+                const currentTime = centerRef.current.currentTime;
+                leftRef.current.currentTime = currentTime;
+                rightRef.current.currentTime = currentTime;
+            };
+
+            const playAllVideos = () => {
+                if (centerRef.current) centerRef.current.play();
+                if (leftRef.current) leftRef.current.play();
+                if (rightRef.current) leftRef.current.play();
+            };
+
+            const pauseAllVideos = () => {
+                if (centerRef.current) centerRef.current.pause();
+                if (leftRef.current) leftRef.current.pause();
+                if (rightRef.current) leftRef.current.pause();
+            };
+
+            // Touch and mouse handlers
+            const handleTouchStart = (e) => {
+                setTouchStartX(e.touches[0].clientX);
+            };
+            
+            const handleTouchEnd = (e) => {
+                const diff = e.changedTouches[0].clientX - touchStartX;
+                if (Math.abs(diff) > swipeThreshold) {
+                    cycleVideo();
+                }
+            };
+            
+            const handleMouseDown = (e) => {
+                setMouseStartX(e.clientX);
+            };
+            
+            const handleMouseUp = (e) => {
+                const diff = e.clientX - mouseStartX;
+                if (Math.abs(diff) > swipeThreshold) {
+                    cycleVideo();
+                }
+            };
+
+            const cycleVideo = () => {
+                syncAllVideos(); // Ensure videos stay in sync when switching
+                if (activeVideo === 'videoCenter') {
+                    setActiveVideo('videoRight');
+                } else if (activeVideo === 'videoRight') {
+                    setActiveVideo('videoLeft');
+                } else {
+                    setActiveVideo('videoCenter');
+                }
+            };
+
+            const handleCardMouseEnter = () => {
+                playAllVideos();
+            };
+
+            const handleCardMouseLeave = () => {
+                pauseAllVideos();
+            };
+
+            const handleVideoTimeUpdate = () => {
+                syncAllVideos();
+            };
+            
+            return (
+                <Dialog
+                    open={open}
+                    onClose={onClose}
+                    maxWidth="lg"
+                    fullWidth
+                    aria-labelledby="video-modal-title"
+                >
+                    <DialogTitle id="video-modal-title">
+                        {titleText}
+                    </DialogTitle>
+                    <DialogContent>
+                        <Typography variant="body1" gutterBottom>{contentText}</Typography>
+                        
+                        {subtitleLinks}
+                        
+                        <Typography variant="subtitle1" style={{ marginTop: '16px' }}>
+                            Video ({activeVideo}):
+                        </Typography>
+                        
+                        <div className="modal-video-container"
+                            onTouchStart={handleTouchStart}
+                            onTouchEnd={handleTouchEnd}
+                            onMouseDown={handleMouseDown}
+                            onMouseUp={handleMouseUp}
+                            onMouseEnter={handleCardMouseEnter}
+                            onMouseLeave={handleCardMouseLeave}
+                        >
+                            {/* Center video */}
+                            <div style={{ display: activeVideo === 'videoCenter' ? 'block' : 'none' }}>
+                                <video 
+                                    ref={centerRef} 
+                                    controls 
+                                    loop 
+                                    onTimeUpdate={handleVideoTimeUpdate}
+                                    style={{ width: '100%' }}
+                                >
+                                    <source src={videoData.videos?.videoCenter} type="video/mp4" />
+                                    Your browser does not support the video tag.
+                                </video>
+                            </div>
+                            
+                            {/* Right video */}
+                            <div style={{ display: activeVideo === 'videoRight' ? 'block' : 'none' }}>
+                                <video 
+                                    ref={rightRef} 
+                                    controls 
+                                    loop
+                                    style={{ width: '100%' }}
+                                >
+                                    <source src={videoData.videos?.videoRight} type="video/mp4" />
+                                    Your browser does not support the video tag.
+                                </video>
+                            </div>
+                            
+                            {/* Left video */}
+                            <div style={{ display: activeVideo === 'videoLeft' ? 'block' : 'none' }}>
+                                <video 
+                                    ref={leftRef} 
+                                    controls 
+                                    loop
+                                    style={{ width: '100%' }}
+                                >
+                                    <source src={videoData.videos?.videoLeft} type="video/mp4" />
+                                    Your browser does not support the video tag.
+                                </video>
+                            </div>
+                        </div>
+                        
+                        {/* For glos type, show NMM data if any */}
+                        {type === 'glos' && videoData.nmm_data && videoData.nmm_data.length > 0 && (
+                            <Box mt={3}>
+                                <Typography variant="h6">Related NMM Data:</Typography>
+                                {videoData.nmm_data.map((nmm, index) => (
+                                    <Card key={`nmm-${nmm.id}`} style={{ marginTop: '10px' }}>
+                                        <CardContent>
+                                            <Typography variant="subtitle1">NMM ID: {nmm.id}</Typography>
+                                            <Typography variant="body2">Type: {nmm.type}</Typography>
+                                            <Typography variant="body2">Theme: {nmm.thema}</Typography>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </Box>
+                        )}
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={onClose} color="primary">Close</Button>
+                    </DialogActions>
+                </Dialog>
+            );
+        }
+        
+        // Update components to show basic info with "View Video" button
+        function WordCard({ word }) {
+            // Word cards don't have videos, so keep this simple
+            return (
+                <Card className="result-card">
+                    <CardContent>
+                        <Typography variant="h6">Word: {word.word}</Typography>
+                        <Typography variant="body1">Lemma: {word.lemma}</Typography>
+                        {word.senses && (
+                            <Typography variant="body2">
+                                Senses: {Array.isArray(word.senses) ? word.senses.join(', ') : 'N/A'}
+                            </Typography>
+                        )}
+                    </CardContent>
+                </Card>
+            );
+        }
+
+        // Updated SentenceCard component to only show basic info and a button to open videos
+        function SentenceCard({ sentence, onViewVideo }) {
+            return (
+                <Card className="result-card clickable-card" onClick={() => onViewVideo(sentence.ID, 'zin')}>
+                    <CardContent>
+                        <Typography variant="h6">Sentence ID: {sentence.ID}</Typography>
+                        <Typography variant="body1">
+                            {sentence.zinString ? sentence.zinString : 'No sentence text available'}
+                        </Typography>
+                        {sentence.Nederlands && (
+                            <Typography variant="body2" color="textSecondary">
+                                Nederlands: {sentence.Nederlands}
+                            </Typography>
+                        )}
+                    </CardContent>
+                    <CardActions>
+                        <Button 
+                            size="small" 
+                            color="primary" 
+                            startIcon={<span className="material-icons">videocam</span>}
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevent card click event
+                                onViewVideo(sentence.ID, 'zin');
+                            }}
+                        >
+                            View Video
+                        </Button>
+                    </CardActions>
+                </Card>
+            );
+        }
+
+        // Similarly update the FormCard component
+        function FormCard({ form, onViewVideo }) {
+            return (
+                <Card className="result-card clickable-card" onClick={() => onViewVideo(form.id, 'glos')}>
+                    <CardContent>
+                        <Typography variant="h6">Form ID: {form.id}</Typography>
+                        <Typography variant="body1">Senses: {form.senses}</Typography>
+                        {form.signbank && (
+                            <Typography variant="body2" color="textSecondary">
+                                Signbank ID: {form.signbank}
+                            </Typography>
+                        )}
+                    </CardContent>
+                    <CardActions>
+                        <Button 
+                            size="small" 
+                            color="primary" 
+                            startIcon={<span className="material-icons">videocam</span>}
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevent card click event
+                                onViewVideo(form.id, 'glos');
+                            }}
+                        >
+                            View Video
+                        </Button>
+                    </CardActions>
+                </Card>
+            );
+        }
+
+        // New component for SignBank Records
+        function SbRecordCard({ record, onViewVideo }) {
+            // Parse senses_dutch if it's JSON
+            let sensesText = "";
+            try {
+                if (record.senses_dutch) {
+                    const senses = JSON.parse(record.senses_dutch);
+                    sensesText = Object.values(senses).join(", ");
+                }
+            } catch (e) {
+                sensesText = record.senses_dutch || "";
+            }
+            
+            return (
+                <Card className="result-card clickable-card" onClick={() => onViewVideo(record.id, 'sb')}>
+                    <CardContent>
+                        <Typography variant="h6">SignBank ID: {record.id}</Typography>
+                        <Typography variant="body1">Senses: {sensesText}</Typography>
+                    </CardContent>
+                    <CardActions>
+                        <Button 
+                            size="small" 
+                            color="primary" 
+                            startIcon={<span className="material-icons">videocam</span>}
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevent card click event
+                                onViewVideo(record.id, 'sb');
+                            }}
+                        >
+                            View Video
+                        </Button>
+                    </CardActions>
+                </Card>
+            );
+        }
+
+        // Similarly update the NMMCard component
+        function NMMCard({ nmm, onViewVideo }) {
+            return (
+                <Card className="result-card clickable-card" onClick={() => onViewVideo(nmm.id, 'nmm')}>
+                    <CardContent>
+                        <Typography variant="h6">NMM Data ID: {nmm.id}</Typography>
+                        <Typography variant="body1">Signbank ID: {nmm.signbank_id}</Typography>
+                        <Typography variant="body1">Glos: {nmm.glos}</Typography>
+                        <Typography variant="body2">Type: {nmm.type}</Typography>
+                        <Typography variant="body2">Thema: {nmm.thema}</Typography>
+                    </CardContent>
+                    <CardActions>
+                        <Button 
+                            size="small" 
+                            color="primary" 
+                            startIcon={<span className="material-icons">videocam</span>}
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevent card click event
+                                onViewVideo(nmm.id, 'nmm');
+                            }}
+                        >
+                            View Video
+                        </Button>
+                    </CardActions>
+                </Card>
+            );
+        }
+        
+        // New component for displaying synonyms
+        function SynonymCard({ synonym }) {
+            return (
+                <Card className="result-card">
+                    <CardContent>
+                        <Typography variant="h6">Synonym: {synonym.synonym}</Typography>
+                        <Typography variant="body1">Lemma: {synonym.lemma}</Typography>
+                        <Typography variant="body2" color="textSecondary">ID: {synonym.id}</Typography>
+                    </CardContent>
+                </Card>
+            );
+        }
+        
+        // Create a new component for suggestions dropdown
+        function SuggestionsDropdown({ suggestions, anchorEl, open, onClose, onSelectSuggestion }) {
+            if (!suggestions || (!suggestions.words.length && !suggestions.lemmas.length && 
+                               (!suggestions.synonyms || !suggestions.synonyms.length))) {
+                return null;
+            }
+            
+            return (
+                <Popper open={open} anchorEl={anchorEl} transition placement="bottom-start" style={{ zIndex: 1300, width: anchorEl ? anchorEl.clientWidth : 'auto' }}>
+                    {({ TransitionProps }) => (
+                        <Grow {...TransitionProps}>
+                            <Paper elevation={3}>
+                                <ClickAwayListener onClickAway={onClose}>
+                                    <div>
+                                        {suggestions.words.length > 0 && (
+                                            <List subheader={<ListSubheader>Words</ListSubheader>} dense>
+                                                {suggestions.words.map((suggestion, index) => (
+                                                    <ListItem 
+                                                        button 
+                                                        key={`word-${index}`}
+                                                        onClick={() => onSelectSuggestion(suggestion)}
+                                                    >
+                                                        <ListItemText primary={suggestion.text} />
+                                                    </ListItem>
+                                                ))}
+                                            </List>
+                                        )}
+                                        
+                                        {suggestions.lemmas.length > 0 && (
+                                            <List subheader={<ListSubheader>Lemmas</ListSubheader>} dense>
+                                                {suggestions.lemmas.map((suggestion, index) => (
+                                                    <ListItem 
+                                                        button 
+                                                        key={`lemma-${index}`}
+                                                        onClick={() => onSelectSuggestion(suggestion)}
+                                                    >
+                                                        <ListItemText primary={suggestion.text} />
+                                                    </ListItem>
+                                                ))}
+                                            </List>
+                                        )}
+                                        
+                                        {suggestions.synonyms && suggestions.synonyms.length > 0 && (
+                                            <List subheader={<ListSubheader>Synonyms</ListSubheader>} dense>
+                                                {suggestions.synonyms.map((suggestion, index) => (
+                                                    <ListItem 
+                                                        button 
+                                                        key={`synonym-${index}`}
+                                                        onClick={() => onSelectSuggestion(suggestion, true)}
+                                                    >
+                                                        <ListItemText 
+                                                            primary={suggestion.text} 
+                                                            secondary={`Lemma: ${suggestion.lemma}`}
+                                                        />
+                                                    </ListItem>
+                                                ))}
+                                            </List>
+                                        )}
+                                    </div>
+                                </ClickAwayListener>
+                            </Paper>
+                        </Grow>
+                    )}
+                </Popper>
+            );
+        }
+
+        function App() {
+            const [searchQuery, setSearchQuery] = useState('');
+            const [results, setResults] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const [tabValue, setTabValue] = useState(0);
+            const [snackbarOpen, setSnackbarOpen] = useState(false);
+            const [offset, setOffset] = useState(0);
+            const [suggestions, setSuggestions] = useState({ words: [], lemmas: [] });
+            const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+            const searchInputRef = useRef(null);
+            // New state for video modal
+            const [videoModalOpen, setVideoModalOpen] = useState(false);
+            const [videoData, setVideoData] = useState(null);
+            const [videoType, setVideoType] = useState(null);
+            const [videoLoading, setVideoLoading] = useState(false);
+            // Apply debounce to search query to prevent excessive API calls
+            const debouncedSearchQuery = useDebounce(searchQuery, 500);
+            // Minimum number of characters required to trigger auto-search
+            const MIN_SEARCH_LENGTH = 2;
+            // Minimum characters for suggestions
+            const MIN_SUGGESTION_LENGTH = 3;
+            // Function to fetch video data
+            const fetchVideoData = useCallback(async (id, type) => {
+                if (!id || !type) return;
+                setVideoLoading(true);
+                try {
+                    const response = await fetch(`./getVideos.php?id=${id}&type=${type}`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    if (data.success) {
+                        setVideoData(data.data);
+                        setVideoType(type);
+                        setVideoModalOpen(true);
+                    } else {
+                        throw new Error(data.errors ? data.errors.join(', ') : 'Failed to fetch video data');
+                    }
+                } catch (err) {
+                    setError(`Error loading video: ${err.message}`);
+                    setSnackbarOpen(true);
+                } finally {
+                    setVideoLoading(false);
+                }
+            }, []);
+
+            // Handler for View Video button
+            const handleViewVideo = (id, type) => {
+                fetchVideoData(id, type);
+            };
+
+            // Function to fetch suggestions
+            const fetchSuggestions = useCallback(async (query) => {
+                if (!query || query.length < MIN_SUGGESTION_LENGTH) {
+                    setSuggestions({ words: [], lemmas: [] });
+                    setSuggestionsOpen(false);
+                    return;
+                }
+                try {
+                    const formData = new FormData();
+                    formData.append('query', query);
+                    formData.append('suggestions', 'true');
+                    const response = await fetch('./index.php', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    if (data.success && data.data.suggestions) {
+                        setSuggestions(data.data.suggestions);
+                        setSuggestionsOpen(
+                            data.data.suggestions.words.length > 0 || 
+                            data.data.suggestions.lemmas.length > 0 || 
+                            (data.data.suggestions.synonyms && data.data.suggestions.synonyms.length > 0)
+                        );
+                    } else {
+                        setSuggestions({ words: [], lemmas: [] });
+                        setSuggestionsOpen(false);
+                    }
+                } catch (err) {
+                    console.error("Error fetching suggestions:", err);
+                    setSuggestions({ words: [], lemmas: [] });
+                    setSuggestionsOpen(false);
+                }
+            }, []);
+
+            // Listen for changes to search input for suggestions
+            useEffect(() => {
+                if (searchQuery && searchQuery.length >= MIN_SUGGESTION_LENGTH) {
+                    fetchSuggestions(searchQuery);
+                } else {
+                    setSuggestions({ words: [], lemmas: [] });
+                    setSuggestionsOpen(false);
+                }
+            }, [searchQuery, fetchSuggestions]);
+
+            // Handle suggestion selection
+            const handleSelectSuggestion = (suggestion, isSynonym = false) => {
+                // For synonyms, show the synonym in the input field but search for the lemma
+                if (isSynonym) {
+                    setSearchQuery(suggestion.text);  // Display the synonym text in the input field
+                    setSuggestionsOpen(false);
+                    handleSearch(suggestion.lemma);   // Search using the lemma
+                } else {
+                    setSearchQuery(suggestion.text);
+                    setSuggestionsOpen(false);
+                    handleSearch(suggestion.text);
+                }
+            };
+
+            // Modify handleSearch to include offset in POST data
+            const handleSearch = useCallback(async (query, pgOffset = 0) => {
+                if (!query || query.trim().length < MIN_SEARCH_LENGTH) {
+                    return;
+                }
+                setLoading(true);
+                setError(null);
+                try {
+                    const formData = new FormData();
+                    formData.append('query', query);
+                    formData.append('offset', pgOffset);
+                    const response = await fetch('./index.php', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    setResults(data);
+                    if (!data.success) {
+                        throw new Error(data.errors ? data.errors.join(', ') : 'Unknown error occurred');
+                    }
+                    
+                    // Switch to the Sentences tab automatically if results found
+                    if (data.success && 
+                        ((data.data.words && data.data.words.length > 0) || 
+                         (data.data.sentences && data.data.sentences.length > 0) || 
+                         (data.data.forms && data.data.forms.length > 0))) {
+                        setTabValue(0);
+                    }
+                } catch (err) {
+                    setError(err.message);
+                    setSnackbarOpen(true);
+                } finally {
+                    setLoading(false);
+                }
+            }, []);
+            
+            // Use the debounced search query to trigger auto-search
+            useEffect(() => {
+                if (debouncedSearchQuery && debouncedSearchQuery.trim().length >= MIN_SEARCH_LENGTH) {
+                    handleSearch(debouncedSearchQuery);
+                }
+            }, [debouncedSearchQuery, handleSearch]);
+
+            // Handle manual search button click
+            const handleSearchButtonClick = () => {
+                if (searchQuery.trim().length < MIN_SEARCH_LENGTH) {
+                    setError(`Please enter at least ${MIN_SEARCH_LENGTH} characters`);
+                    setSnackbarOpen(true);
+                    return;
+                }
+                handleSearch(searchQuery);
+            };
+
+            const handleTabChange = (event, newValue) => {
+                setTabValue(newValue);
+            };
+
+            const handleSnackbarClose = () => {
+                setSnackbarOpen(false);
+            };
+
+            // Handle next and previous page actions:
+            const handleNextPage = () => {
+                const newOffset = offset + 10;
+                setOffset(newOffset);
+                handleSearch(searchQuery, newOffset);
+            };
+
+            const handlePrevPage = () => {
+                const newOffset = Math.max(0, offset - 10);
+                setOffset(newOffset);
+                handleSearch(searchQuery, newOffset);
+            };
+
+            // Handle suggestion close
+            const handleSuggestionsClose = () => {
+                setSuggestionsOpen(false);
+            };
+
+            // Handle search input focus
+            const handleSearchFocus = () => {
+                if (searchQuery && searchQuery.length >= MIN_SUGGESTION_LENGTH && 
+                    (suggestions.words.length > 0 || 
+                     suggestions.lemmas.length > 0 || 
+                     (suggestions.synonyms && suggestions.synonyms.length > 0))) {
+                    setSuggestionsOpen(true);
+                }
+            };
+            
+            // Handle video modal close
+            const handleVideoModalClose = () => {
+                setVideoModalOpen(false);
+                setVideoData(null);
+                setVideoType(null);
+            };
+
+            return (
+                <div>
+                    <AppBar position="static" color="primary">
+                        <Toolbar>
+                            <Typography variant="h6">
+                                Zin API Test Interface
+                            </Typography>
+                        </Toolbar>
+                    </AppBar>
+                    <Container className="container">
+                        <Paper style={{ padding: '20px', marginTop: '20px' }}>
+                            <Typography variant="h5" gutterBottom>
+                                Search for Words, Sentences, and Forms
+                            </Typography>
+                            <Grid container spacing={2} alignItems="center">
+                                <Grid item xs={12} sm={8}>
+                                    <TextField
+                                        fullWidth
+                                        label={`Enter search query (min ${MIN_SEARCH_LENGTH} characters)`}
+                                        variant="outlined"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && handleSearchButtonClick()}
+                                        onFocus={handleSearchFocus}
+                                        inputRef={searchInputRef}
+                                        helperText={searchQuery && searchQuery.length < MIN_SEARCH_LENGTH ? 
+                                            `Please enter at least ${MIN_SEARCH_LENGTH} characters` : 
+                                            loading ? "Searching..." : "Type at least 3 characters for suggestions"}
+                                    />
+                                    <SuggestionsDropdown 
+                                        suggestions={suggestions} 
+                                        anchorEl={searchInputRef.current} 
+                                        open={suggestionsOpen} 
+                                        onClose={handleSuggestionsClose} 
+                                        onSelectSuggestion={handleSelectSuggestion} 
+                                    />
+                                </Grid>
+                                <Grid item xs={12} sm={4}>
+                                    <Button 
+                                        fullWidth
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={handleSearchButtonClick}
+                                        disabled={loading || searchQuery.trim().length < MIN_SEARCH_LENGTH}
+                                        startIcon={loading ? <CircularProgress size={20} /> : null}
+                                    >
+                                        {loading ? 'Searching...' : 'Search'}
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                        </Paper>
+                        
+                        {(loading || videoLoading) && (
+                            <div className="loading-overlay">
+                                <CircularProgress size={60} />
+                            </div>
+                        )}
+                        
+                        {results && (
+                            <Paper style={{ marginTop: '20px' }}>
+                                <Tabs
+                                    value={tabValue}
+                                    onChange={handleTabChange}
+                                    indicatorColor="primary"
+                                    textColor="primary"
+                                    variant="fullWidth"
+                                >
+                                    <Tab label="Sentences" />
+                                    <Tab label="Forms & SignBank" />
+                                    <Tab label="Raw JSON" />
+                                </Tabs>
+                                
+                                <TabPanel value={tabValue} index={0}>
+                                    {results.data.sentences && results.data.sentences.length > 0 ? (
+                                        results.data.sentences.map((sentence, index) => (
+                                            <SentenceCard 
+                                                key={`sentence-${sentence.ID}-${offset}-${index}`} 
+                                                sentence={sentence} 
+                                                onViewVideo={handleViewVideo} 
+                                            />
+                                        ))
+                                    ) : (
+                                        <Typography variant="body1">
+                                            No sentences found for "{searchQuery}".
+                                        </Typography>
+                                    )}
+                                    <Grid container spacing={2} justifyContent="space-between" style={{ marginTop: '10px' }}>
+                                        <Grid item>
+                                            <Button variant="contained" onClick={handlePrevPage} disabled={offset === 0}>
+                                                Previous Page
+                                            </Button>
+                                        </Grid>
+                                        <Grid item>
+                                            <Button variant="contained" onClick={handleNextPage}>
+                                                Next Page
+                                            </Button>
+                                        </Grid>
+                                    </Grid>
+                                </TabPanel>
+                                
+                                <TabPanel value={tabValue} index={1}>
+                                    {/* Forms section */}
+                                    {results.data.forms && results.data.forms.length > 0 ? (
+                                        <>
+                                            <Typography variant="h6" gutterBottom>Forms</Typography>
+                                            {results.data.forms.map((form, index) => (
+                                                <FormCard 
+                                                    key={`form-${form.id}-${offset}-${index}`} 
+                                                    form={form} 
+                                                    onViewVideo={handleViewVideo} 
+                                                />
+                                            ))}
+                                        </>
+                                    ) : (
+                                        <Typography variant="body1">
+                                            No glos data found for "{searchQuery}".
+                                        </Typography>
+                                    )}
+                                    
+                                    {/* SB Records section */}
+                                    {results.data.sb_records && results.data.sb_records.length > 0 ? (
+                                        <>
+                                            <Typography variant="h6" gutterBottom style={{marginTop: '20px'}}>
+                                                SignBank Records
+                                            </Typography>
+                                            {results.data.sb_records.map((record, index) => (
+                                                <SbRecordCard 
+                                                    key={`sb-${record.id}-${offset}-${index}`} 
+                                                    record={record} 
+                                                    onViewVideo={handleViewVideo} 
+                                                />
+                                            ))}
+                                        </>
+                                    ) : null}
+                                    
+                                    {/* Synonyms section */}
+                                    {results.data.synonyms && results.data.synonyms.length > 0 ? (
+                                        <>
+                                            <Typography variant="h6" gutterBottom style={{marginTop: '20px'}}>
+                                                Synonyms
+                                            </Typography>
+                                            {results.data.synonyms.map((synonym, index) => (
+                                                <SynonymCard 
+                                                    key={`synonym-${synonym.id}-${offset}-${index}`} 
+                                                    synonym={synonym} 
+                                                />
+                                            ))}
+                                        </>
+                                    ) : null}
+                                    {/* NMM data will be shown in the modal when viewing a form with associated NMM data */}
+                                    
+                                    <Grid container spacing={2} justifyContent="space-between" style={{ marginTop: '10px' }}>
+                                        <Grid item>
+                                            <Button variant="contained" onClick={handlePrevPage} disabled={offset === 0}>
+                                                Previous Page
+                                            </Button>
+                                        </Grid>
+                                        <Grid item>
+                                            <Button variant="contained" onClick={handleNextPage}>
+                                                Next Page
+                                            </Button>
+                                        </Grid>
+                                    </Grid>
+                                </TabPanel>
+                                
+                                <TabPanel value={tabValue} index={2}>
+                                    <Typography variant="h6" gutterBottom>
+                                        Raw JSON Response
+                                    </Typography>
+                                    <JSONViewer data={results} />
+                                </TabPanel>
+                            </Paper>
+                        )}
+                        
+                        {/* Video Modal */}
+                        <VideoModal 
+                            open={videoModalOpen}
+                            onClose={handleVideoModalClose}
+                            videoData={videoData}
+                            type={videoType}
+                        />
+                    </Container>
+                    <Snackbar
+                        open={snackbarOpen}
+                        autoHideDuration={6000}
+                        onClose={handleSnackbarClose}
+                        message={error}
+                        action={
+                            <IconButton
+                                size="small"
+                                color="inherit"
+                                onClick={handleSnackbarClose}
+                            >
+                                <span className="material-icons">close</span>
+                            </IconButton>
+                        }
+                    />
+                </div>
+            );
+        }
+        
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
