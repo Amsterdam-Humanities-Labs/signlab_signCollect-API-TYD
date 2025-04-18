@@ -81,6 +81,12 @@ try {
 
         // Add offset for pagination
         $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        
+        // Add resultType filter parameter (all, sentences, forms)
+        $resultType = isset($_POST['resultType']) ? strtolower($_POST['resultType']) : 'all';
+        
+        // Add option to group results by theme
+        $groupByThema = isset($_POST['groupByThema']) && $_POST['groupByThema'] === 'true';
 
         if (empty($searchQuery)) {
             throw new Exception('Search query is required');
@@ -90,12 +96,87 @@ try {
         $logger->logRequest('search', $searchQuery);
         
         // Perform the search and get all results
-        $response['data'] = $searchService->search($searchQuery, $offset);
+        $results = $searchService->search($searchQuery, $offset);
+        
+        // Filter results by type if requested
+        if ($resultType !== 'all') {
+            $filteredResults = [];
+            
+            // Always include words and synonyms
+            $filteredResults['words'] = $results['words'] ?? [];
+            $filteredResults['synonyms'] = $results['synonyms'] ?? [];
+            
+            // Filter by specific result type
+            switch ($resultType) {
+                case 'sentences':
+                    $filteredResults['sentences'] = $results['sentences'] ?? [];
+                    break;
+                    
+                case 'glosses': // Updated type name (replacing forms and sb_records)
+                    $filteredResults['glosses'] = $results['glosses'] ?? [];
+                    break;
+                    
+                case 'forms': // For backward compatibility
+                    $filteredResults['glosses'] = array_filter($results['glosses'] ?? [], function($item) {
+                        return isset($item['source']) && $item['source'] === 'signcollect';
+                    });
+                    break;
+                    
+                case 'sb_records': // For backward compatibility
+                    $filteredResults['glosses'] = array_filter($results['glosses'] ?? [], function($item) {
+                        return isset($item['source']) && $item['source'] === 'signbank';
+                    });
+                    break;
+                    
+                default:
+                    // If an invalid type is specified, return all results
+                    $filteredResults = $results;
+            }
+            
+            $response['data'] = $filteredResults;
+        } else {
+            // Return all results (default)
+            $response['data'] = $results;
+        }
+        
+        // Group results by thema if requested
+        if ($groupByThema && !empty($response['data'])) {
+            $grouped = ['words' => $response['data']['words'] ?? [], 'synonyms' => $response['data']['synonyms'] ?? []];
+            
+            // Group sentences by thema
+            if (!empty($response['data']['sentences'])) {
+                $grouped['sentences_by_thema'] = [];
+                foreach ($response['data']['sentences'] as $sentence) {
+                    $thema = $sentence['thema'] ?? 'Unknown';
+                    if (!isset($grouped['sentences_by_thema'][$thema])) {
+                        $grouped['sentences_by_thema'][$thema] = [];
+                    }
+                    $grouped['sentences_by_thema'][$thema][] = $sentence;
+                }
+            }
+            
+            // Group glosses by thema
+            if (!empty($response['data']['glosses'])) {
+                $grouped['glosses_by_thema'] = [];
+                foreach ($response['data']['glosses'] as $gloss) {
+                    $thema = $gloss['thema'] ?? 'Unknown';
+                    if (!isset($grouped['glosses_by_thema'][$thema])) {
+                        $grouped['glosses_by_thema'][$thema] = [];
+                    }
+                    $grouped['glosses_by_thema'][$thema][] = $gloss;
+                }
+            }
+            
+            $response['data'] = $grouped;
+        }
+        
         $response['success'] = true;
     } else {
         // Provide API info for GET requests
         $response['success'] = true;
-        $response['message'] = 'API is running. Use POST method with "query" parameter to search, or call getVideos.php with ID to fetch video data.';
+        $response['message'] = 'API is running. Use POST method with "query" parameter to search, or call getVideos.php with ID to fetch video data. '
+                             . 'Optional parameters: resultType (all, sentences, forms, sb_records) to filter results, '
+                             . 'groupByThema=true to group results by theme.';
         $logger->logRequest('info');
     }
     

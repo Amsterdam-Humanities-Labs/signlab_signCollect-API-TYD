@@ -941,39 +941,36 @@
                                 </TabPanel>
                                 
                                 <TabPanel value={tabValue} index={1}>
-                                    {/* Forms section */}
-                                    {results.data.forms && results.data.forms.length > 0 ? (
+                                    {/* Glosses section - combining Forms and SignBank Records */}
+                                    {results.data.glosses && results.data.glosses.length > 0 ? (
                                         <>
-                                            <Typography variant="h6" gutterBottom>Forms</Typography>
-                                            {results.data.forms.map((form, index) => (
-                                                <FormCard 
-                                                    key={`form-${form.id}-${offset}-${index}`} 
-                                                    form={form} 
-                                                    onViewVideo={handleViewVideo} 
-                                                />
-                                            ))}
+                                            <Typography variant="h6" gutterBottom>Glosses</Typography>
+                                            {results.data.glosses.map((gloss, index) => {
+                                                if (gloss.source === 'form_data') {
+                                                    return (
+                                                        <FormCard 
+                                                            key={`form-${gloss.id}-${offset}-${index}`} 
+                                                            form={gloss} 
+                                                            onViewVideo={handleViewVideo} 
+                                                        />
+                                                    );
+                                                } else if (gloss.source === 'sb_records') {
+                                                    return (
+                                                        <SbRecordCard 
+                                                            key={`sb-${gloss.id}-${offset}-${index}`} 
+                                                            record={gloss} 
+                                                            onViewVideo={handleViewVideo} 
+                                                        />
+                                                    );
+                                                }
+                                                return null; // In case we get an unknown source
+                                            })}
                                         </>
                                     ) : (
                                         <Typography variant="body1">
-                                            No glos data found for "{searchQuery}".
+                                            No glosses found for "{searchQuery}".
                                         </Typography>
                                     )}
-                                    
-                                    {/* SB Records section */}
-                                    {results.data.sb_records && results.data.sb_records.length > 0 ? (
-                                        <>
-                                            <Typography variant="h6" gutterBottom style={{marginTop: '20px'}}>
-                                                SignBank Records
-                                            </Typography>
-                                            {results.data.sb_records.map((record, index) => (
-                                                <SbRecordCard 
-                                                    key={`sb-${record.id}-${offset}-${index}`} 
-                                                    record={record} 
-                                                    onViewVideo={handleViewVideo} 
-                                                />
-                                            ))}
-                                        </>
-                                    ) : null}
                                     
                                     {/* Synonyms section */}
                                     {results.data.synonyms && results.data.synonyms.length > 0 ? (
