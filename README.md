@@ -1,2 +1,1 @@
-# sCAPI
-# sCAPI
+signCollect API
