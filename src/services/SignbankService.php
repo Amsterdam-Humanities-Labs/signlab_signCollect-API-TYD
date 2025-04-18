@@ -29,7 +29,7 @@ class SignbankService
     public function getSignbankById($id)
     {
         // Fetch sb_records data
-        $stmt = $this->conn->prepare("SELECT * FROM sb_records WHERE id = ?");
+        $stmt = $this->conn->prepare("SELECT id, senses_dutch, annotation_id_gloss_dutch, nme_videos FROM sb_records WHERE id = ?");
         if (!$stmt) {
             $this->response['debug']['sb_records_prepare_error'] = $this->conn->error;
             throw new Exception('Prepare statement failed: ' . $this->conn->error);
@@ -53,21 +53,38 @@ class SignbankService
         // Parse senses_dutch from JSON
         $sensesDutch = !empty($sbRecord['senses_dutch']) ? json_decode($sbRecord['senses_dutch'], true) : [];
         
-        // Get video for this record (different format than other tables)
+        // Initialize videos structure
         $videos = [
             'videoLeft' => null,
             'videoCenter' => null,
             'videoRight' => null
         ];
         
-        if (!empty($sbRecord['video'])) {
-            // For sb_records, video is stored directly in the video field
-            $videoPath = $sbRecord['video'];
-            // Check if it has the full URL already
-            if (strpos($videoPath, 'http') !== 0) {
-                $videos['videoCenter'] = MEDIA_BASE_URL . $videoPath;
-            } else {
-                $videos['videoCenter'] = $videoPath;
+        // Get video from nme_videos JSON field
+        if (!empty($sbRecord['nme_videos'])) {
+            try {
+                $nmeVideos = json_decode($sbRecord['nme_videos'], true);
+                
+                if (is_array($nmeVideos) && !empty($nmeVideos)) {
+                    // Get the first video
+                    $firstVideo = $nmeVideos[0];
+                    
+                    if (isset($firstVideo['Link'])) {
+                        $videoLink = $firstVideo['Link'];
+                        
+                        // Transform the URL as required
+                        $videoLink = str_replace(
+                            'https://signbank.cls.ru.nl//dictionary/protected_media/glossvideo/NGT/UI/', 
+                            'https://signcollect.nl/uploads/',
+                            $videoLink
+                        );
+                        
+                        // Assign to videoCenter
+                        $videos['videoCenter'] = $videoLink;
+                    }
+                }
+            } catch (Exception $e) {
+                $this->response['debug']['nme_videos_parse_error'] = $e->getMessage();
             }
         }
         
@@ -75,6 +92,7 @@ class SignbankService
         return [
             "id" => $sbRecord['id'] ?? null,
             "senses_dutch" => $sensesDutch,
+            "annotation_id_gloss_dutch" => $sbRecord['annotation_id_gloss_dutch'] ?? "",
             "videos" => $videos
         ];
     }

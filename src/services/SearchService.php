@@ -36,8 +36,7 @@ class SearchService
             return [
                 'words' => [],
                 'sentences' => [],
-                'forms' => [],
-                'sb_records' => [],
+                'glosses' => [], // Changed from forms and sb_records to glosses
                 'synonyms' => []
             ];
         }
@@ -45,17 +44,62 @@ class SearchService
         // Sanitize input to prevent SQL injection
         $searchQuery = $this->sanitizeInput($searchQuery);
         
-        // Get search results
+        // Get raw search results
+        $formResults = $this->searchForms($searchQuery, $offset, $limit);
+        $sbResults = $this->searchSignbank($searchQuery, $offset, $limit);
+        
+        // Merge forms and sb_records into glosses with duplicate removal
+        $glosses = $this->mergeGlosses($formResults, $sbResults);
+        
         $results = [
             'words' => $this->searchWords($searchQuery),
             'sentences' => $this->searchSentences($searchQuery, $offset, $limit),
-            'forms' => $this->searchForms($searchQuery, $offset, $limit),
-            'sb_records' => $this->searchSignbank($searchQuery, $offset, $limit),
+            'glosses' => $glosses, // New combined glosses field
             'synonyms' => $this->searchSynonyms($searchQuery, $offset, $limit)
         ];
         
-        // Sanitize ALL output to prevent XSS
         return $this->sanitizeResults($results);
+    }
+    
+    /**
+     * Merge forms and SignBank records into a single glosses array with duplicates removed
+     * 
+     * @param array $forms Form data results
+     * @param array $sbRecords SignBank records results
+     * @return array Merged glosses without duplicates
+     */
+    private function mergeGlosses($forms, $sbRecords)
+    {
+        $glosses = [];
+        $processedGlosses = []; // Track processed glosses to avoid duplicates
+        
+        // Process form_data entries first
+        foreach ($forms as $form) {
+            $glos = $form['senses'] ?? '';
+            if (!empty($glos) && !in_array($glos, $processedGlosses)) {
+                $processedGlosses[] = $glos;
+                
+                // Mark the source for frontend reference
+                $form['source'] = 'form_data';
+                $glosses[] = $form;
+            }
+        }
+        
+        // Process sb_records and add only non-duplicates
+        foreach ($sbRecords as $record) {
+            $annotationIdGloss = $record['annotation_id_gloss_dutch'] ?? '';
+            
+            // Skip if this gloss already exists
+            if (!empty($annotationIdGloss) && !in_array($annotationIdGloss, $processedGlosses)) {
+                $processedGlosses[] = $annotationIdGloss;
+                
+                // Mark the source for frontend reference
+                $record['source'] = 'sb_records';
+                $glosses[] = $record;
+            }
+        }
+        
+        return $glosses;
     }
     
     /**
@@ -234,8 +278,8 @@ class SearchService
         
         if (!empty($lemmas)) {
             foreach ($lemmas as $lemma) {
-                // Updated query with LIMIT for sentences pagination
-                $sql = "SELECT ID, zinString FROM sentences WHERE JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?) LIMIT ?, ?";
+                // Updated query to include thema field
+                $sql = "SELECT ID, zinString, thema FROM sentences WHERE JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?) LIMIT ?, ?";
                 $this->response['debug']['sentences_query'] = $sql;
                 
                 $stmt = $this->conn->prepare($sql);
@@ -275,10 +319,11 @@ class SearchService
                     }
                     
                     if (!$exists) {
-                        // Just add the basic sentence info - no videos
+                        // Include thema in the basic sentence info
                         $sentenceMatches[] = [
                             "ID" => $sentence['ID'] ?? null,
                             "zinString" => $sentence['zinString'] ?? "",
+                            "thema" => $sentence['thema'] ?? "Unknown",
                             "type" => "zin" // Add type for frontend to know which endpoint to call
                         ];
                     }
@@ -305,8 +350,8 @@ class SearchService
         
         if (!empty($lemmas)) {
             foreach ($lemmas as $lemma) {
-                // Updated query with LIMIT for form_data pagination
-                $sql = "SELECT id, senses, signbank FROM form_data WHERE JSON_CONTAINS(CAST(IF(senses = '', '[]', senses) AS JSON), JSON_QUOTE(?)) LIMIT ?, ?";
+                // Updated query to include thema field
+                $sql = "SELECT id, senses, signbank, thema FROM form_data WHERE JSON_CONTAINS(CAST(IF(senses = '', '[]', senses) AS JSON), JSON_QUOTE(?)) AND extern = '1' AND glosZichtbaar = '0' LIMIT ?, ? ";
                 $this->response['debug']['form_data_query'] = $sql;
                 
                 $stmt = $this->conn->prepare($sql);
@@ -340,11 +385,12 @@ class SearchService
                     }
                     
                     if (!$exists) {
-                        // Just add basic form info without videos
+                        // Include thema in basic form info
                         $formMatches[] = [
                             "id" => $form['id'],
                             "senses" => $form['senses'] ?? "",
                             "signbank" => $form['signbank'] ?? "",
+                            "thema" => $form['thema'] ?? "Unknown",
                             "type" => "glos" // Add type for frontend to know which endpoint to call
                         ];
                     }

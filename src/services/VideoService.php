@@ -43,7 +43,7 @@ class VideoService
         
         try {
             if ($zOgValue === 'glos') {
-                $sql = "SELECT l_file, m_file, r_file FROM matched_transcriptions WHERE m_transcription = ? AND (zOg LIKE 'glos' OR zOg LIKE 'extern')";
+                $sql = "SELECT l_file, m_file, r_file FROM matched_transcriptions WHERE m_transcription = ? AND (zOg LIKE 'glos' OR zOg LIKE 'extern' OR zOg LIKE '%nmm%')";
                 $stmt = $this->conn->prepare($sql);
                 if (!$stmt) {
                     $this->response['debug']['video_prepare_error'] = $this->conn->error;
