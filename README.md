@@ -2,7 +2,7 @@
 
 ## Overview
 
-This API provides access to a database of sign language resources including sentences, forms, SignBank records, and Non-Manual Markings (NMM). It allows for searching by keywords and retrieving video data for sign language content.
+This API provides access to a database of sign language resources including sentences, glosses (forms and SignBank records), and Non-Manual Markings (NMM). It allows for searching by keywords and retrieving video data for sign language content.
 
 ## API Endpoints
 
@@ -33,7 +33,7 @@ POST /web/zin/api/index.php
 |-----------|------|----------|-------------|
 | query | string | Yes | The search term to look for |
 | offset | integer | No | Pagination offset (default: 0) |
-| resultType | string | No | Filter results by type: 'all', 'sentences', 'forms', or 'sb_records' |
+| resultType | string | No | Filter results by type: 'all', 'sentences', 'glosses' |
 | groupByThema | string | No | Set to 'true' to group results by theme |
 | suggestions | string | No | Set to 'true' to get search suggestions instead of results |
 
@@ -45,8 +45,7 @@ POST /web/zin/api/index.php
   "data": {
     "words": [...],
     "sentences": [...],
-    "forms": [...],
-    "sb_records": [...],
+    "glosses": [...],
     "synonyms": [...]
   },
   "errors": [],
@@ -66,7 +65,7 @@ When `groupByThema=true` is set, results are grouped by theme:
       "Theme1": [...],
       "Theme2": [...]
     },
-    "forms_by_thema": {
+    "glosses_by_thema": {
       "Theme1": [...],
       "Theme2": [...]
     },
