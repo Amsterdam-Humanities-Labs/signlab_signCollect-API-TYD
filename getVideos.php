@@ -43,7 +43,7 @@ try {
 
     // Initialize services
     $logger = new ApiLogger($conn);
-    $videoService = new VideoService($conn, $response);
+    $videoService = new VideoService($conn, $response, $logger); // Pass logger to VideoService
     $nmmService = new NmmService($conn, $response);
     $sentenceService = new SentenceService($conn, $response, $videoService);
     $formService = new FormService($conn, $response, $videoService, $nmmService);
@@ -57,8 +57,10 @@ try {
         throw new Exception('ID parameter is required');
     }
 
-    // Log the request
-    $logger->logRequest('getVideos', $id);
+    // Log the request - No need to log info requests here anymore as VideoService will log actual queries
+    if (!empty($id) && !empty($type)) {
+        $logger->logRequest('getVideos', "$id:$type");
+    }
 
     // Based on the type (zin, glos, nmm, sb), fetch different data
     switch ($type) {
@@ -98,9 +100,8 @@ try {
 $responseTime = microtime(true) - $startTime;
 $response['response_time'] = $responseTime;
 
-// Log response time BEFORE closing the connection
-if (isset($logger) && isset($conn) && $conn) {
-    $logger->logRequest('getVideos', $id ?? '', 'success', '', $responseTime);
+// Just close the connection
+if (isset($conn) && $conn) {
     $conn->close();
 }
 

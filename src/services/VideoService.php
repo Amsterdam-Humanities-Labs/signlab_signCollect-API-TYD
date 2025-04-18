@@ -6,17 +6,20 @@ class VideoService
 {
     private $conn;
     private $response;
+    private $logger;  // New property for logger
     
     /**
      * Constructor
      * 
      * @param mysqli $conn Database connection
      * @param array $response Reference to response array
+     * @param ApiLogger $logger Optional logger instance
      */
-    public function __construct($conn, &$response)
+    public function __construct($conn, &$response, $logger = null)
     {
         $this->conn = $conn;
         $this->response = &$response;
+        $this->logger = $logger;
     }
     
     /**
@@ -28,6 +31,11 @@ class VideoService
      */
     public function getVideosForEntity($entityId, $zOgValue)
     {
+        // Log the video request
+        if ($this->logger) {
+            $this->logger->logRequest('getVideosForEntity', "$entityId:$zOgValue");
+        }
+        
         // Initialize default response structure
         $videos = [
             'videoLeft' => null,
@@ -47,6 +55,12 @@ class VideoService
                 $stmt = $this->conn->prepare($sql);
                 if (!$stmt) {
                     $this->response['debug']['video_prepare_error'] = $this->conn->error;
+                    
+                    // Log error
+                    if ($this->logger) {
+                        $this->logger->logRequest('getVideosForEntity_error', "$entityId:$zOgValue", 'error', "Prepare error: {$this->conn->error}");
+                    }
+                    
                     return $videos;
                 }
                 $stmt->bind_param("i", $entityId);
@@ -55,6 +69,12 @@ class VideoService
                 $stmt = $this->conn->prepare($sql);
                 if (!$stmt) {
                     $this->response['debug']['video_prepare_error'] = $this->conn->error;
+                    
+                    // Log error
+                    if ($this->logger) {
+                        $this->logger->logRequest('getVideosForEntity_error', "$entityId:$zOgValue", 'error', "Prepare error: {$this->conn->error}");
+                    }
+                    
                     return $videos;
                 }
                 $stmt->bind_param("is", $entityId, $zOgValue);
@@ -62,6 +82,12 @@ class VideoService
             
             if (!$stmt->execute()) {
                 $this->response['debug']['video_execute_error'] = $stmt->error;
+                
+                // Log execute error
+                if ($this->logger) {
+                    $this->logger->logRequest('getVideosForEntity_error', "$entityId:$zOgValue", 'error', "Execute error: {$stmt->error}");
+                }
+                
                 $stmt->close();
                 return $videos;
             }
@@ -80,10 +106,29 @@ class VideoService
                     $videos['videoCenter'] = $centerFile ? MEDIA_BASE_URL . $centerFile : null;
                     $videos['videoRight'] = $rightFile ? MEDIA_BASE_URL . $rightFile : null;
                 }
+                
+                // Log successful video retrieval
+                if ($this->logger) {
+                    $videoCount = 0;
+                    if ($videos['videoLeft']) $videoCount++;
+                    if ($videos['videoCenter']) $videoCount++;
+                    if ($videos['videoRight']) $videoCount++;
+                    
+                    $this->logger->logRequest('getVideosForEntity_success', "$entityId:$zOgValue", 'success', "Found $videoCount videos");
+                }
+            } else {
+                // Log no videos found
+                if ($this->logger) {
+                    $this->logger->logRequest('getVideosForEntity_empty', "$entityId:$zOgValue", 'warning', "No videos found");
+                }
             }
         } catch (Exception $e) {
             $this->response['debug']['video_exception'] = $e->getMessage();
-            // Return empty video structure to maintain consistent response
+            
+            // Log exception
+            if ($this->logger) {
+                $this->logger->logRequest('getVideosForEntity_exception', "$entityId:$zOgValue", 'error', $e->getMessage());
+            }
         }
         
         return $videos;
