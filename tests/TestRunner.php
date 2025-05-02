@@ -9,6 +9,22 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
+// Set testing environment
+if (!defined('ENVIRONMENT')) {
+    define('ENVIRONMENT', 'DEV');
+    define('IS_DEV', true);
+    define('IS_PROD', false);
+}
+
+// Define base media URL constants if they aren't already defined
+// This ensures tests can run independently
+if (!defined('MEDIA_BASE_URL')) {
+    define('MEDIA_BASE_URL', 'https://media.signcollect.nl/');
+}
+if (!defined('SUBTITLE_BASE_URL')) {
+    define('SUBTITLE_BASE_URL', 'https://media.signcollect.nl/zin/eaf/zin/');
+}
+
 // Load test classes
 require_once 'TestVideoServices.php';
 require_once 'TestSearchServices.php';

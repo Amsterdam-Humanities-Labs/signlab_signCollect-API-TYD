@@ -31,8 +31,8 @@ class SentenceService
      */
     public function getSentenceById($id)
     {
-        // Fetch sentence data
-        $stmt = $this->conn->prepare("SELECT * FROM sentences WHERE ID = ?");
+        // Fetch sentence data with only existing columns (ID and zinString)
+        $stmt = $this->conn->prepare("SELECT ID, zinString FROM sentences WHERE ID = ?");
         if (!$stmt) {
             $this->response['debug']['sentence_prepare_error'] = $this->conn->error;
             throw new Exception('Prepare statement failed: ' . $this->conn->error);
@@ -83,9 +83,9 @@ class SentenceService
         return [
             "ID" => $sentence['ID'] ?? null,
             "zinString" => $sentence['zinString'] ?? "",
-            "Nederlands" => $sentence['Nederlands'] ?? "",
-            "Gebaar_voor_Gebaar" => $sentence['Gebaar_voor_Gebaar'] ?? "",
-            "Signbank_ID_glossen" => $sentence['Signbank_ID_glossen'] ?? "",
+            "Nederlands" => "", // Providing empty default for non-existent column
+            "Gebaar_voor_Gebaar" => "", // Providing empty default for non-existent column
+            "Signbank_ID_glossen" => "", // Providing empty default for non-existent column
             "videos" => $sentence['videos'],
             "subtitleFiles" => $subtitleFullUrls
         ];

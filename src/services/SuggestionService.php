@@ -101,14 +101,8 @@ class SuggestionService
         // First, get lemmas from word suggestions
         $wordSuggestions = $this->getWordSuggestions($searchQuery);
         foreach ($wordSuggestions as $word) {
-            // Add lemma to lemma suggestions if not already there
-            $lemmaExists = false;
-            foreach ($lemmaSuggestions as $lemma) {
-                if ($lemma['text'] === $word['lemma']) {
-                    $lemmaExists = true;
-                    break;
-                }
-            }
+            // Add lemma to lemma suggestions if not already there using in_array
+            $lemmaExists = in_array($word['lemma'], array_column($lemmaSuggestions, 'text'), true);
             
             if (!$lemmaExists && $word['lemma'] !== $word['text']) {
                 $lemmaSuggestions[] = [
@@ -130,14 +124,8 @@ class SuggestionService
                 $lemmaResult = $stmt->get_result();
                 
                 while ($lemma = $lemmaResult->fetch_assoc()) {
-                    // Check if lemma already exists in suggestions
-                    $lemmaExists = false;
-                    foreach ($lemmaSuggestions as $existingLemma) {
-                        if ($existingLemma['text'] === $lemma['lemma']) {
-                            $lemmaExists = true;
-                            break;
-                        }
-                    }
+                    // Check if lemma already exists in suggestions using in_array
+                    $lemmaExists = in_array($lemma['lemma'], array_column($lemmaSuggestions, 'text'), true);
                     
                     if (!$lemmaExists) {
                         $lemmaSuggestions[] = [
