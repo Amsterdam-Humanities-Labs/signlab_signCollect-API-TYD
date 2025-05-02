@@ -27,7 +27,7 @@ $response = [
     'success' => false,
     'data' => [],
     'errors' => [],
-    'debug' => [] // Add debug information section
+    'debug' => IS_PROD ? null : [] // Only include debug info in non-production environments
 ];
 
 try {
@@ -54,7 +54,23 @@ try {
     $type = isset($_GET['type']) ? $_GET['type'] : null;
 
     if (empty($id)) {
-        throw new Exception('ID parameter is required');
+        $response['success'] = false;
+        $response['errors'][] = 'ID parameter is required';
+        
+        // Set HTTP status code to 400 Bad Request
+        http_response_code(400);
+        
+        // Log the error
+        if (isset($logger)) {
+            $logger->logRequest('getVideos_validation_error', '', 'error', 'ID parameter is required');
+        }
+        
+        // Calculate response time
+        $responseTime = microtime(true) - $startTime;
+        $response['response_time'] = $responseTime;
+        
+        echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        exit;
     }
 
     // Log the request - No need to log info requests here anymore as VideoService will log actual queries
@@ -81,16 +97,41 @@ try {
             break;
             
         default:
-            throw new Exception('Invalid type parameter. Must be one of: zin, glos, nmm, sb');
+            $response['success'] = false;
+            $response['errors'][] = 'Invalid type parameter. Must be one of: zin, glos, nmm, sb';
+            
+            // Set HTTP status code to 400 Bad Request
+            http_response_code(400);
+            
+            // Log the error
+            if (isset($logger)) {
+                $logger->logRequest('getVideos_validation_error', $id, 'error', 'Invalid type parameter');
+            }
+            
+            // Calculate response time
+            $responseTime = microtime(true) - $startTime;
+            $response['response_time'] = $responseTime;
+            
+            echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            exit;
     }
     
     $response['success'] = true;
     
 } catch (Exception $e) {
     $response['success'] = false;
-    $response['errors'][] = $e->getMessage();
     
-    // Log the error
+    if (IS_PROD) {
+        // Show user-friendly message in production
+        $response['errors'][] = 'An error occurred while retrieving the video. Please try again later.';
+    } else {
+        // Show detailed error information in development
+        $response['errors'][] = $e->getMessage();
+        $response['debug']['exception'] = $e->getMessage();
+        $response['debug']['exception_trace'] = $e->getTraceAsString();
+    }
+    
+    // Log the error (always log full details regardless of environment)
     if (isset($logger)) {
         $logger->logRequest('getVideos_error', $id ?? '', 'error', $e->getMessage());
     }
