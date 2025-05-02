@@ -27,6 +27,10 @@ The Search API allows for searching sign language content by keyword.
 POST /web/zin/api/index.php
 ```
 
+### Request Format
+
+The API accepts POST requests with **multipart/form-data** content type. This allows for sending form data with multiple parts, which is especially useful when submitting text parameters alongside potential file uploads in the future.
+
 ### Parameters
 
 | Parameter | Type | Required | Description |
