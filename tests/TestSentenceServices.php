@@ -87,7 +87,7 @@ class TestSentenceServices {
      */
     public function testGetSentenceByValidId() {
         // Find a valid sentence ID for testing
-        $stmt = $this->conn->prepare("SELECT ID FROM sentences LIMIT 1");
+        $stmt = $this->conn->prepare("SELECT ID, zinString FROM sentences LIMIT 1");
         $stmt->execute();
         $result = $stmt->get_result();
         
@@ -113,6 +113,16 @@ class TestSentenceServices {
             if ($result !== true) return $result;
             
             $result = $this->assertTrue(isset($sentence['zinString']), "Sentence should have a zinString field");
+            if ($result !== true) return $result;
+            
+            // These fields should be present but might be empty strings since they don't exist in DB
+            $result = $this->assertTrue(isset($sentence['Nederlands']), "Sentence should have a Nederlands field");
+            if ($result !== true) return $result;
+            
+            $result = $this->assertTrue(isset($sentence['Gebaar_voor_Gebaar']), "Sentence should have a Gebaar_voor_Gebaar field");
+            if ($result !== true) return $result;
+            
+            $result = $this->assertTrue(isset($sentence['Signbank_ID_glossen']), "Sentence should have a Signbank_ID_glossen field");
             if ($result !== true) return $result;
             
             $result = $this->assertTrue(isset($sentence['videos']), "Sentence should have videos field");

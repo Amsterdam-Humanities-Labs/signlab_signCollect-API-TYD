@@ -246,13 +246,7 @@ class SearchService
     private function getLemmas($searchQuery)
     {
         $words = $this->searchWords($searchQuery);
-        $lemmas = [];
-        
-        foreach ($words as $word) {
-            if (!in_array($word['lemma'], $lemmas)) {
-                $lemmas[] = $word['lemma'];
-            }
-        }
+        $lemmas = array_unique(array_column($words, 'lemma'));
         
         // If no lemmas found, use search query
         if (empty($lemmas)) {
@@ -278,8 +272,8 @@ class SearchService
         
         if (!empty($lemmas)) {
             foreach ($lemmas as $lemma) {
-                // Updated query to include thema field
-                $sql = "SELECT ID, zinString, thema FROM sentences WHERE JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?) LIMIT ?, ?";
+                // Updated query to include theme field
+                $sql = "SELECT ID, zinString, theme FROM sentences WHERE JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?) LIMIT ?, ?";
                 $this->response['debug']['sentences_query'] = $sql;
                 
                 $stmt = $this->conn->prepare($sql);
@@ -309,21 +303,15 @@ class SearchService
                 $this->response['debug']['sentences_found_for_lemma_' . $lemma] = $sentenceResult->num_rows;
                 
                 while ($sentence = $sentenceResult->fetch_assoc()) {
-                    // Check if we already have this sentence
-                    $exists = false;
-                    foreach ($sentenceMatches as $existingSentence) {
-                        if ($existingSentence['ID'] == $sentence['ID']) {
-                            $exists = true;
-                            break;
-                        }
-                    }
+                    // Check if we already have this sentence using in_array
+                    $exists = in_array($sentence['ID'], array_column($sentenceMatches, 'ID'));
                     
                     if (!$exists) {
-                        // Include thema in the basic sentence info
+                        // Include theme in the basic sentence info
                         $sentenceMatches[] = [
                             "ID" => $sentence['ID'] ?? null,
                             "zinString" => $sentence['zinString'] ?? "",
-                            "thema" => $sentence['thema'] ?? "Unknown",
+                            "theme" => $sentence['theme'] ?? "Unknown",
                             "type" => "zin" // Add type for frontend to know which endpoint to call
                         ];
                     }
@@ -350,8 +338,8 @@ class SearchService
         
         if (!empty($lemmas)) {
             foreach ($lemmas as $lemma) {
-                // Updated query to include thema field
-                $sql = "SELECT id, senses, signbank, thema FROM form_data WHERE JSON_CONTAINS(CAST(IF(senses = '', '[]', senses) AS JSON), JSON_QUOTE(?)) AND extern = '1' AND glosZichtbaar = '0' LIMIT ?, ? ";
+                // Updated query to include theme field
+                $sql = "SELECT id, senses, signbank, theme FROM form_data WHERE JSON_CONTAINS(CAST(IF(senses = '', '[]', senses) AS JSON), JSON_QUOTE(?)) AND extern = '1' AND glosZichtbaar = '0' LIMIT ?, ? ";
                 $this->response['debug']['form_data_query'] = $sql;
                 
                 $stmt = $this->conn->prepare($sql);
@@ -375,22 +363,16 @@ class SearchService
                 $this->response['debug']['forms_found_for_lemma_' . $lemma] = $formResult->num_rows;
                 
                 while ($form = $formResult->fetch_assoc()) {
-                    // Check if we already have this form
-                    $exists = false;
-                    foreach ($formMatches as $existingForm) {
-                        if ($existingForm['id'] == $form['id']) {
-                            $exists = true;
-                            break;
-                        }
-                    }
+                    // Check if we already have this form using in_array
+                    $exists = in_array($form['id'], array_column($formMatches, 'id'));
                     
                     if (!$exists) {
-                        // Include thema in basic form info
+                        // Include theme in basic form info
                         $formMatches[] = [
                             "id" => $form['id'],
                             "senses" => $form['senses'] ?? "",
                             "signbank" => $form['signbank'] ?? "",
-                            "thema" => $form['thema'] ?? "Unknown",
+                            "theme" => $form['theme'] ?? "Unknown",
                             "type" => "glos" // Add type for frontend to know which endpoint to call
                         ];
                     }
@@ -485,14 +467,8 @@ class SearchService
                 $this->response['debug']['sb_records_found_for_lemma_' . $this->sanitizeOutput($lemma)] = $sbResult->num_rows;
                 
                 while ($record = $sbResult->fetch_assoc()) {
-                    // Check if we already have this record
-                    $exists = false;
-                    foreach ($sbRecordMatches as $existingRecord) {
-                        if ($existingRecord['id'] == $record['id']) {
-                            $exists = true;
-                            break;
-                        }
-                    }
+                    // Check if we already have this record using in_array
+                    $exists = in_array($record['id'], array_column($sbRecordMatches, 'id'));
                     
                     if (!$exists) {
                         // Just add basic record info without videos

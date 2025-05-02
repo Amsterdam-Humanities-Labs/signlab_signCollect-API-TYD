@@ -24,7 +24,7 @@ $response = [
     'success' => false,
     'data' => [],
     'errors' => [],
-    'debug' => [] // Add debug information section
+    'debug' => IS_PROD ? null : [] // Only include debug info in non-production environments
 ];
 
 try {
@@ -86,13 +86,43 @@ try {
         $resultType = isset($_POST['resultType']) ? strtolower($_POST['resultType']) : 'all';
         
         // Add option to group results by theme
-        $groupByThema = isset($_POST['groupByThema']) && $_POST['groupByThema'] === 'true';
+        $groupByTheme = isset($_POST['groupByTheme']) && $_POST['groupByTheme'] === 'true';
 
         if (empty($searchQuery)) {
-            throw new Exception('Search query is required');
+            $response['success'] = false;
+            $response['errors'][] = 'Search query is required';
+            
+            // Set HTTP status code to 400 Bad Request
+            http_response_code(400);
+            
+            // Log the error
+            if (isset($logger)) {
+                $logger->logRequest('search_validation_error', '', 'error', 'Search query is required');
+            }
+            
+            // Calculate response time
+            $responseTime = microtime(true) - $startTime;
+            $response['response_time'] = $responseTime;
+            
+            echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            exit;
         }
         
-        // Log the search request
+        // Ensure resultType and groupByTheme are in $_REQUEST for API logging
+        $_REQUEST['resultType'] = $resultType;
+        $_REQUEST['groupByTheme'] = $groupByTheme ? 'true' : 'false';
+        
+        // Add originalVideoId if it exists in the request
+        if (isset($_POST['originalVideoId'])) {
+            $_REQUEST['originalVideoId'] = $_POST['originalVideoId'];
+        }
+        
+        // Add type if it exists in the request
+        if (isset($_POST['type'])) {
+            $_REQUEST['type'] = $_POST['type'];
+        }
+        
+        // Log the search request (all $_REQUEST data will be automatically included)
         $logger->logRequest('search', $searchQuery);
         
         // Perform the search and get all results
@@ -139,31 +169,31 @@ try {
             $response['data'] = $results;
         }
         
-        // Group results by thema if requested
-        if ($groupByThema && !empty($response['data'])) {
+        // Group results by theme if requested
+        if ($groupByTheme && !empty($response['data'])) {
             $grouped = ['words' => $response['data']['words'] ?? [], 'synonyms' => $response['data']['synonyms'] ?? []];
             
-            // Group sentences by thema
+            // Group sentences by theme
             if (!empty($response['data']['sentences'])) {
-                $grouped['sentences_by_thema'] = [];
+                $grouped['sentences_by_theme'] = [];
                 foreach ($response['data']['sentences'] as $sentence) {
-                    $thema = $sentence['thema'] ?? 'Unknown';
-                    if (!isset($grouped['sentences_by_thema'][$thema])) {
-                        $grouped['sentences_by_thema'][$thema] = [];
+                    $theme = $sentence['theme'] ?? 'Unknown';
+                    if (!isset($grouped['sentences_by_theme'][$theme])) {
+                        $grouped['sentences_by_theme'][$theme] = [];
                     }
-                    $grouped['sentences_by_thema'][$thema][] = $sentence;
+                    $grouped['sentences_by_theme'][$theme][] = $sentence;
                 }
             }
             
-            // Group glosses by thema
+            // Group glosses by theme
             if (!empty($response['data']['glosses'])) {
-                $grouped['glosses_by_thema'] = [];
+                $grouped['glosses_by_theme'] = [];
                 foreach ($response['data']['glosses'] as $gloss) {
-                    $thema = $gloss['thema'] ?? 'Unknown';
-                    if (!isset($grouped['glosses_by_thema'][$thema])) {
-                        $grouped['glosses_by_thema'][$thema] = [];
+                    $theme = $gloss['theme'] ?? 'Unknown';
+                    if (!isset($grouped['glosses_by_theme'][$theme])) {
+                        $grouped['glosses_by_theme'][$theme] = [];
                     }
-                    $grouped['glosses_by_thema'][$thema][] = $gloss;
+                    $grouped['glosses_by_theme'][$theme][] = $gloss;
                 }
             }
             
@@ -176,17 +206,24 @@ try {
         $response['success'] = true;
         $response['message'] = 'API is running. Use POST method with "query" parameter to search, or call getVideos.php with ID to fetch video data. '
                              . 'Optional parameters: resultType (all, sentences, forms, sb_records) to filter results, '
-                             . 'groupByThema=true to group results by theme.';
+                             . 'groupByTheme=true to group results by theme.';
         $logger->logRequest('info');
     }
     
 } catch (Exception $e) {
     $response['success'] = false;
-    $response['errors'][] = $e->getMessage();
-    $response['debug']['exception'] = $e->getMessage();
-    $response['debug']['exception_trace'] = $e->getTraceAsString();
     
-    // Log the error
+    if (IS_PROD) {
+        // Show user-friendly message in production
+        $response['errors'][] = 'An error occurred while processing your request. Please try again later.';
+    } else {
+        // Show detailed error information in development
+        $response['errors'][] = $e->getMessage();
+        $response['debug']['exception'] = $e->getMessage();
+        $response['debug']['exception_trace'] = $e->getTraceAsString();
+    }
+    
+    // Log the error (always log full details regardless of environment)
     if (isset($logger)) {
         $logger->logRequest('error', $searchQuery ?? '', 'error', $e->getMessage());
     }
@@ -196,7 +233,11 @@ try {
 $responseTime = microtime(true) - $startTime;
 $response['response_time'] = $responseTime;
 
-// Log response time BEFORE closing the connection
+// Capture MySQL version before closing the connection
+$response['debug']['php_version'] = PHP_VERSION;
+$response['debug']['mysql_version'] = $conn->server_info ?? 'Unknown';
+
+// Log response time and close the connection
 if (isset($logger) && isset($conn) && $conn) {
     $logger->logRequest('info', '', 'success', '', $responseTime);
     $conn->close();
@@ -215,10 +256,6 @@ if (count($response['errors']) > 0) {
         $response['debug']['php_error_log_status'] = 'Not found or not accessible';
     }
 }
-
-// Add PHP configuration information
-$response['debug']['php_version'] = PHP_VERSION;
-$response['debug']['mysql_version'] = $conn->server_info ?? 'Unknown';
 
 echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 exit;

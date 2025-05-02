@@ -35,7 +35,7 @@ class FormService
     public function getFormById($id)
     {
         // Fetch form data
-        $stmt = $this->conn->prepare("SELECT * FROM form_data WHERE id = ?");
+        $stmt = $this->conn->prepare("SELECT id, senses, signbank FROM form_data WHERE id = ?");
         if (!$stmt) {
             $this->response['debug']['form_prepare_error'] = $this->conn->error;
             throw new Exception('Prepare statement failed: ' . $this->conn->error);

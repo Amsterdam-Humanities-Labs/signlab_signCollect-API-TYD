@@ -178,8 +178,9 @@ class TestSearchServices {
         if ($result !== true) return $result;
         
         // Check that we have at least one of the expected result types
+        // Note: Changed to look for 'glosses' instead of 'forms' and 'sb_records'
         $hasAnyResults = false;
-        $resultTypes = ['words', 'sentences', 'forms', 'sb_records', 'synonyms'];
+        $resultTypes = ['words', 'sentences', 'glosses', 'synonyms'];
         
         foreach ($resultTypes as $type) {
             if (isset($results[$type]) && !empty($results[$type])) {
@@ -370,7 +371,8 @@ class TestSearchServices {
             if ($result !== true) return $result;
             
             // Verify we got expected empty structures for all result types
-            $resultTypes = ['words', 'sentences', 'forms', 'sb_records', 'synonyms'];
+            // Updated to check for 'glosses' instead of 'forms' and 'sb_records'
+            $resultTypes = ['words', 'sentences', 'glosses', 'synonyms'];
             $allEmpty = true;
             
             foreach ($resultTypes as $type) {
