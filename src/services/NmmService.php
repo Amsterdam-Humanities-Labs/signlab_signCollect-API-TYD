@@ -28,8 +28,8 @@ class NmmService
      */
     public function getNmmById($id)
     {
-        // Fetch NMM data directly
-        $stmt = $this->conn->prepare("SELECT * FROM nmm_data WHERE id = ?");
+        // Fetch NMM data directly - selecting only necessary columns
+        $stmt = $this->conn->prepare("SELECT id, name, description, type, signbank_id FROM nmm_data WHERE id = ?");
         if (!$stmt) {
             $this->response['debug']['nmm_prepare_error'] = $this->conn->error;
             throw new Exception('Prepare statement failed: ' . $this->conn->error);
@@ -58,7 +58,7 @@ class NmmService
         ];
         
         // Get videos from matched_transcriptions with zOg LIKE '%nmm%'
-        $videoSql = "SELECT * FROM matched_transcriptions 
+        $videoSql = "SELECT l_file, m_file, r_file FROM matched_transcriptions 
                      WHERE m_transcription = ? AND zOg LIKE '%nmm%'";
         
         $videoStmt = $this->conn->prepare($videoSql);
@@ -107,7 +107,8 @@ class NmmService
         $nmmData = [];
         
         // Query nmm_data table for records with matching signbank_id
-        $sql = "SELECT * FROM nmm_data WHERE signbank_id = ?";
+        // Select only necessary columns instead of all columns
+        $sql = "SELECT id, name, description, type, signbank_id FROM nmm_data WHERE signbank_id = ?";
         
         $stmt = $this->conn->prepare($sql);
         if (!$stmt) {
@@ -133,7 +134,7 @@ class NmmService
                 $nmmRecord = $nmmRow;
                 
                 // Get videos from matched_transcriptions with zOg LIKE '%nmm%'
-                $videoSql = "SELECT * FROM matched_transcriptions 
+                $videoSql = "SELECT l_file, m_file, r_file FROM matched_transcriptions 
                              WHERE m_transcription = ? AND zOg LIKE '%nmm%'";
                 
                 $videoStmt = $this->conn->prepare($videoSql);
