@@ -6,17 +6,23 @@ class SearchService
 {
     private $conn;
     private $response;
+    private $videoService; // Property for VideoService
+    private $mocapService; // New property for MocapService
     
     /**
      * Constructor
      * 
      * @param mysqli $conn Database connection
      * @param array $response Reference to response array
+     * @param VideoService $videoService Optional VideoService instance
+     * @param MocapService $mocapService Optional MocapService instance
      */
-    public function __construct($conn, &$response)
+    public function __construct($conn, &$response, $videoService = null, $mocapService = null)
     {
         $this->conn = $conn;
         $this->response = &$response;
+        $this->videoService = $videoService;
+        $this->mocapService = $mocapService;
     }
     
     /**
@@ -75,12 +81,28 @@ class SearchService
         
         // Process form_data entries first
         foreach ($forms as $form) {
-            $glos = $form['senses'] ?? '';
+            $glos = '';
+            
+            // Extract first sense item from array for processing
+            if (isset($form['senses']) && is_array($form['senses']) && !empty($form['senses'])) {
+                $glos = $form['senses'][0] ?? '';
+            } elseif (isset($form['senses']) && is_string($form['senses'])) {
+                // Handle old format if still encountered
+                $decoded = json_decode($form['senses'], true);
+                $glos = is_array($decoded) && !empty($decoded) ? $decoded[0] : $form['senses'];
+            }
+            
             if (!empty($glos) && !in_array($glos, $processedGlosses)) {
                 $processedGlosses[] = $glos;
                 
-                // Mark the source for frontend reference
-                $form['source'] = 'form_data';
+                // Check for mocap data
+                if ($this->mocapService !== null) {
+                    $form['mocap'] = $this->mocapService->hasMocapData($glos);
+                    $this->response['debug']['form_' . $form['id'] . '_mocap'] = $form['mocap'];
+                } else {
+                    $form['mocap'] = false;
+                }
+                
                 $glosses[] = $form;
             }
         }
@@ -89,12 +111,23 @@ class SearchService
         foreach ($sbRecords as $record) {
             $annotationIdGloss = $record['annotation_id_gloss_dutch'] ?? '';
             
+            // If annotation_id_gloss_dutch is empty, use the id as a fallback to ensure we include the record
+            if (empty($annotationIdGloss) && isset($record['id'])) {
+                $annotationIdGloss = 'sb_' . $record['id'];
+            }
+            
             // Skip if this gloss already exists
             if (!empty($annotationIdGloss) && !in_array($annotationIdGloss, $processedGlosses)) {
                 $processedGlosses[] = $annotationIdGloss;
                 
-                // Mark the source for frontend reference
-                $record['source'] = 'sb_records';
+                // Check for mocap data
+                if ($this->mocapService !== null) {
+                    $record['mocap'] = $this->mocapService->hasMocapData($annotationIdGloss);
+                    $this->response['debug']['sb_record_' . $record['id'] . '_mocap'] = $record['mocap'];
+                } else {
+                    $record['mocap'] = false;
+                }
+                
                 $glosses[] = $record;
             }
         }
@@ -367,14 +400,38 @@ class SearchService
                     $exists = in_array($form['id'], array_column($formMatches, 'id'));
                     
                     if (!$exists) {
-                        // Include theme in basic form info
-                        $formMatches[] = [
-                            "id" => $form['id'],
-                            "senses" => $form['senses'] ?? "",
-                            "signbank" => $form['signbank'] ?? "",
-                            "theme" => $form['theme'] ?? "Unknown",
-                            "type" => "glos" // Add type for frontend to know which endpoint to call
-                        ];
+                        // Check if there are any videos associated with this form
+                        $hasVideos = true;
+                        
+                        if ($this->videoService !== null) {
+                            $videos = $this->videoService->getVideosForEntity($form['id'], 'glos');
+                            $hasVideos = !empty($videos['videoLeft']) || !empty($videos['videoCenter']) || !empty($videos['videoRight']);
+                            $this->response['debug']['form_' . $form['id'] . '_has_videos'] = $hasVideos;
+                        }
+                        
+                        // Only add the form if it has associated videos
+                        if ($hasVideos) {
+                            // Convert senses from JSON string to array format
+                            $sensesArray = [];
+                            if (!empty($form['senses'])) {
+                                $decodedSenses = json_decode($form['senses'], true);
+                                if (is_array($decodedSenses)) {
+                                    $sensesArray = $decodedSenses;
+                                } elseif (is_string($decodedSenses)) {
+                                    $sensesArray = [$decodedSenses];
+                                }
+                            }
+                            
+                            // Include theme in basic form info
+                            $formMatches[] = [
+                                "id" => $form['id'],
+                                "senses" => $sensesArray, // Now using array format like sb_records
+                                "signbank" => $form['signbank'] ?? "",
+                                "theme" => $form['theme'] ?? "Unknown",
+                                "type" => "glos", // Add type for frontend to know which endpoint to call
+                                "source" => "form_data"
+                            ];
+                        }
                     }
                 }
             }
@@ -399,8 +456,8 @@ class SearchService
         
         if (!empty($lemmas)) {
             foreach ($lemmas as $lemma) {
-                // Search for lemma in senses_dutch field which is JSON formatted
-                $sql = "SELECT id, senses_dutch FROM sb_records WHERE ";
+                // First query: get potential matches based on LIKE search
+                $sql = "SELECT id, senses_dutch, annotation_id_gloss_dutch FROM sb_records WHERE ";
                 $searchTerms = [];
                 
                 // Split lemma into words for more flexible matching
@@ -466,24 +523,147 @@ class SearchService
                 
                 $this->response['debug']['sb_records_found_for_lemma_' . $this->sanitizeOutput($lemma)] = $sbResult->num_rows;
                 
+                // Process each potential match to verify exact word matches in comma-separated values
                 while ($record = $sbResult->fetch_assoc()) {
                     // Check if we already have this record using in_array
                     $exists = in_array($record['id'], array_column($sbRecordMatches, 'id'));
                     
                     if (!$exists) {
-                        // Just add basic record info without videos
-                        $sbRecordMatches[] = [
-                            "id" => $record['id'],
-                            "senses_dutch" => $this->sanitizeOutput($record['senses_dutch'] ?? ""),
-                            "type" => "sb" // Add type for frontend to know which endpoint to call
-                        ];
+                        // Decode senses_dutch field and check for exact matches
+                        $exactMatch = false;
+                        $wholePhraseMatch = false;
+                        $matchedPhrases = [];
+                        $exactMatchPhrases = [];
+                        
+                        if (!empty($record['senses_dutch'])) {
+                            $decodedSenses = $this->decodeSensesDutch($record['senses_dutch']);
+                            
+                            // Check for exact word matches in phrases
+                            if (isset($decodedSenses['formatted']) && is_array($decodedSenses['formatted'])) {
+                                foreach ($decodedSenses['formatted'] as $key => $data) {
+                                    if (isset($data['phrases']) && is_array($data['phrases'])) {
+                                        foreach ($data['phrases'] as $phrase) {
+                                            // Clean the phrase for comparison
+                                            $cleanPhrase = trim(preg_replace('/[^a-zA-ZÀ-ÿ0-9\s]/', '', $phrase));
+                                            $cleanLemma = trim(preg_replace('/[^a-zA-ZÀ-ÿ0-9\s]/', '', $lemma));
+                                            
+                                            // First check: Is the entire phrase an exact match for the search term?
+                                            if (strcasecmp($cleanPhrase, $cleanLemma) === 0) {
+                                                $wholePhraseMatch = true;
+                                                $exactMatch = true;
+                                                $exactMatchPhrases[] = $phrase;
+                                                break 2; // Break out of both loops - whole phrase match is the best match
+                                            }
+                                            
+                                            // Second check: Does the phrase contain the exact word?
+                                            $wordsInPhrase = preg_split('/\s+/', $cleanPhrase);
+                                            foreach ($wordsInPhrase as $word) {
+                                                if (strcasecmp($word, $cleanLemma) === 0) {
+                                                    $exactMatch = true;
+                                                    $matchedPhrases[] = $phrase;
+                                                    break 2; // Break out of both loops once match is found
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Add the record if it's an exact match
+                        if ($exactMatch) {
+                            // Prioritize whole phrase matches
+                            $displayPhrases = $wholePhraseMatch ? $exactMatchPhrases : $matchedPhrases;
+                            
+                            // Add record with all necessary fields for proper merging
+                            $sbRecordMatches[] = [
+                                "id" => $record['id'],
+                                "annotation_id_gloss_dutch" => $record['annotation_id_gloss_dutch'] ?? "",
+                                "senses" => $displayPhrases,
+                                "type" => "sb", // Add type for frontend to know which endpoint to call
+                                "source" => "sb_records"
+                            ];
+                        }
                     }
                 }
             }
         }
         
+        // Sort results to prioritize whole phrase matches
+        usort($sbRecordMatches, function($a, $b) {
+            // First prioritize whole phrase matches
+            $aWholeMatch = !empty($a['whole_phrase_match']);
+            $bWholeMatch = !empty($b['whole_phrase_match']);
+            
+            if ($aWholeMatch && !$bWholeMatch) {
+                return -1; // a comes first
+            } elseif (!$aWholeMatch && $bWholeMatch) {
+                return 1; // b comes first
+            }
+            
+            // If equal in whole phrase status, maintain original order
+            return 0;
+        });
+        
         $this->response['debug']['sb_record_matches_found'] = count($sbRecordMatches);
         return array_slice($sbRecordMatches, 0, $limit);
+    }
+    
+    /**
+     * Decode HTML entities and extract clean phrases from senses_dutch field
+     * 
+     * @param string $sensesDutch The encoded senses_dutch JSON string
+     * @return array Decoded senses with structured data
+     */
+    private function decodeSensesDutch($sensesDutch)
+    {
+        if (empty($sensesDutch)) {
+            return [];
+        }
+        
+        try {
+            // First decode HTML entities
+            $decodedSenses = html_entity_decode($sensesDutch, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            
+            // Handle double-encoded quotes
+            $decodedSenses = str_replace('&quot;', '"', $decodedSenses);
+            
+            // Parse JSON
+            $sensesData = json_decode($decodedSenses, true);
+            
+            // Format for display
+            $formattedSenses = [];
+            
+            if (is_array($sensesData)) {
+                foreach ($sensesData as $key => $value) {
+                    // Handle comma-separated phrases
+                    if (is_string($value)) {
+                        $phrases = array_map('trim', explode(',', $value));
+                        $formattedSenses[$key] = [
+                            'original' => $value,
+                            'phrases' => $phrases
+                        ];
+                    } else {
+                        $formattedSenses[$key] = [
+                            'original' => $value,
+                            'phrases' => [$value]
+                        ];
+                    }
+                }
+            }
+            
+            return [
+                'raw' => $decodedSenses,
+                'formatted' => $formattedSenses
+            ];
+        } catch (Exception $e) {
+            // In case of errors, return the original with error info
+            $this->response['debug']['senses_decode_error'] = $e->getMessage();
+            return [
+                'raw' => $sensesDutch,
+                'error' => $e->getMessage()
+            ];
+        }
     }
     
     /**
@@ -545,17 +725,58 @@ class SearchService
         
         $sanitized = [];
         
+        // Known JSON fields that should not be HTML-escaped
+        $jsonFields = [
+            'senses', 
+            'senses_dutch', 
+            'control_nodig',
+            'wie',
+            'wie_snel_opname',
+            'studioOpnameWie',
+            'zelfopname',
+            'videoLeft',
+            'videoCenter',
+            'videoRight',
+            'videoTop',
+            'videoA',
+            'videoB',
+            'nme_videos'
+        ];
+        
         foreach ($results as $key => $value) {
             if (is_array($value)) {
                 $sanitized[$key] = $this->sanitizeResults($value);
             } elseif (is_string($value)) {
-                // Use the improved sanitizeOutput method for string values
-                $sanitized[$key] = $this->sanitizeOutput($value);
+                // Special handling for JSON strings
+                if (in_array($key, $jsonFields) && $this->isJson($value)) {
+                    // Decode and re-encode to ensure clean JSON without HTML entities
+                    $sanitized[$key] = json_encode(json_decode($value));
+                } else {
+                    // Use the improved sanitizeOutput method for regular string values
+                    $sanitized[$key] = $this->sanitizeOutput($value);
+                }
             } else {
                 $sanitized[$key] = $value;
             }
         }
         
         return $sanitized;
+    }
+    
+    /**
+     * Check if a string is valid JSON
+     *
+     * @param string $string The string to check
+     * @return boolean True if valid JSON, false otherwise
+     */
+    private function isJson($string) {
+        if (!is_string($string)) return false;
+        
+        // Skip empty strings
+        if (trim($string) === '') return false;
+        
+        // Try to decode
+        json_decode($string);
+        return (json_last_error() == JSON_ERROR_NONE);
     }
 }

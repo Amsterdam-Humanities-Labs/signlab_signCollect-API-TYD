@@ -50,7 +50,60 @@ class VideoService
         }
         
         try {
-            if ($zOgValue === 'glos') {
+            // Special handling for sb_records entities
+            if ($zOgValue === 'sb') {
+                echo "Fetching videos for SignBank record...\n";
+                // Query the sb_records table directly for videos
+                $sql = "SELECT id, video FROM sb_records WHERE id = ?";
+                $stmt = $this->conn->prepare($sql);
+                
+                if (!$stmt) {
+                    $this->response['debug']['video_prepare_error'] = $this->conn->error;
+                    
+                    // Log error
+                    if ($this->logger) {
+                        $this->logger->logRequest('getVideosForEntity_error', "$entityId:$zOgValue", 'error', "Prepare error: {$this->conn->error}");
+                    }
+                    
+                    return $videos;
+                }
+                
+                $stmt->bind_param("i", $entityId);
+                
+                if (!$stmt->execute()) {
+                    $this->response['debug']['video_execute_error'] = $stmt->error;
+                    
+                    // Log execute error
+                    if ($this->logger) {
+                        $this->logger->logRequest('getVideosForEntity_error', "$entityId:$zOgValue", 'error', "Execute error: {$stmt->error}");
+                    }
+                    
+                    $stmt->close();
+                    return $videos;
+                }
+                
+                $result = $stmt->get_result();
+                $stmt->close();
+                
+                if ($result->num_rows > 0) {
+                    $row = $result->fetch_assoc();
+                    
+                    // For SignBank records, we typically have a single video URL
+                    // We'll place it in the videoCenter field for consistency
+                    $videos['videoCenter'] = $row['video'] ? $row['video'] : null;
+                    
+                    // Log successful video retrieval
+                    if ($this->logger) {
+                        $this->logger->logRequest('getVideosForEntity_success', "$entityId:$zOgValue", 'success', "Found SignBank video");
+                    }
+                } else {
+                    // Log no videos found
+                    if ($this->logger) {
+                        $this->logger->logRequest('getVideosForEntity_empty', "$entityId:$zOgValue", 'warning', "No SignBank video found");
+                    }
+                }
+            } 
+            else if ($zOgValue === 'glos') {
                 $sql = "SELECT l_file, m_file, r_file FROM matched_transcriptions WHERE m_transcription = ? AND (zOg LIKE 'glos' OR zOg LIKE 'extern' OR zOg LIKE '%nmm%')";
                 $stmt = $this->conn->prepare($sql);
                 if (!$stmt) {
@@ -80,46 +133,49 @@ class VideoService
                 $stmt->bind_param("is", $entityId, $zOgValue);
             }
             
-            if (!$stmt->execute()) {
-                $this->response['debug']['video_execute_error'] = $stmt->error;
-                
-                // Log execute error
-                if ($this->logger) {
-                    $this->logger->logRequest('getVideosForEntity_error', "$entityId:$zOgValue", 'error', "Execute error: {$stmt->error}");
+            // Only execute this part if we're not handling 'sb' entity type
+            if ($zOgValue !== 'sb') {
+                if (!$stmt->execute()) {
+                    $this->response['debug']['video_execute_error'] = $stmt->error;
+                    
+                    // Log execute error
+                    if ($this->logger) {
+                        $this->logger->logRequest('getVideosForEntity_error', "$entityId:$zOgValue", 'error', "Execute error: {$stmt->error}");
+                    }
+                    
+                    $stmt->close();
+                    return $videos;
                 }
                 
+                $result = $stmt->get_result();
                 $stmt->close();
-                return $videos;
-            }
-            
-            $result = $stmt->get_result();
-            $stmt->close();
-            
-            if ($result->num_rows > 0) {
-                while ($row = $result->fetch_assoc()) {
-                    // Convert .wav extensions to .mp4 for video paths and prepend base URL
-                    $leftFile = preg_replace('/\.wav$/i', '.mp4', $row['l_file']);
-                    $centerFile = preg_replace('/\.wav$/i', '.mp4', $row['m_file']);
-                    $rightFile = preg_replace('/\.wav$/i', '.mp4', $row['r_file']);
-                    
-                    $videos['videoLeft'] = $leftFile ? MEDIA_BASE_URL . $leftFile : null;
-                    $videos['videoCenter'] = $centerFile ? MEDIA_BASE_URL . $centerFile : null;
-                    $videos['videoRight'] = $rightFile ? MEDIA_BASE_URL . $rightFile : null;
-                }
                 
-                // Log successful video retrieval
-                if ($this->logger) {
-                    $videoCount = 0;
-                    if ($videos['videoLeft']) $videoCount++;
-                    if ($videos['videoCenter']) $videoCount++;
-                    if ($videos['videoRight']) $videoCount++;
+                if ($result->num_rows > 0) {
+                    while ($row = $result->fetch_assoc()) {
+                        // Convert .wav extensions to .mp4 for video paths and prepend base URL
+                        $leftFile = preg_replace('/\.wav$/i', '.mp4', $row['l_file']);
+                        $centerFile = preg_replace('/\.wav$/i', '.mp4', $row['m_file']);
+                        $rightFile = preg_replace('/\.wav$/i', '.mp4', $row['r_file']);
+                        
+                        $videos['videoLeft'] = $leftFile ? MEDIA_BASE_URL . $leftFile : null;
+                        $videos['videoCenter'] = $centerFile ? MEDIA_BASE_URL . $centerFile : null;
+                        $videos['videoRight'] = $rightFile ? MEDIA_BASE_URL . $rightFile : null;
+                    }
                     
-                    $this->logger->logRequest('getVideosForEntity_success', "$entityId:$zOgValue", 'success', "Found $videoCount videos");
-                }
-            } else {
-                // Log no videos found
-                if ($this->logger) {
-                    $this->logger->logRequest('getVideosForEntity_empty', "$entityId:$zOgValue", 'warning', "No videos found");
+                    // Log successful video retrieval
+                    if ($this->logger) {
+                        $videoCount = 0;
+                        if ($videos['videoLeft']) $videoCount++;
+                        if ($videos['videoCenter']) $videoCount++;
+                        if ($videos['videoRight']) $videoCount++;
+                        
+                        $this->logger->logRequest('getVideosForEntity_success', "$entityId:$zOgValue", 'success', "Found $videoCount videos");
+                    }
+                } else {
+                    // Log no videos found
+                    if ($this->logger) {
+                        $this->logger->logRequest('getVideosForEntity_empty', "$entityId:$zOgValue", 'warning', "No videos found");
+                    }
                 }
             }
         } catch (Exception $e) {

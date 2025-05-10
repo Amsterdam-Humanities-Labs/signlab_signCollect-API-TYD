@@ -6,10 +6,12 @@ This API provides access to a database of sign language resources including sent
 
 ## API Endpoints
 
-The API consists of two main endpoints:
+The API consists of four main endpoints:
 
 1. **Search API**: `/web/zin/api/index.php` (POST)
 2. **Video API**: `/web/zin/api/getVideos.php` (GET)
+3. **Themes API**: `/web/zin/api/getThemas.php` (GET)
+4. **Theme Videos API**: `/web/zin/api/getThemeVideos.php` (GET)
 
 ## Installation Requirements
 
@@ -205,6 +207,117 @@ Common error scenarios:
 - Invalid entity type
 - Entity not found
 - Database connection issues
+
+## Theme API
+
+The Theme API provides access to themes from the sign language database and their associated videos.
+
+### Get Themes
+
+Retrieves a list of all available distinct themes.
+
+#### Endpoint
+
+```
+GET /web/zin/api/getThemas.php
+```
+
+#### Parameters
+
+No parameters required.
+
+#### Response Format
+
+```json
+{
+  "success": true,
+  "data": [
+    "Theme1",
+    "Theme2",
+    "Theme3",
+    ...
+  ],
+  "errors": [],
+  "response_time": 0.123
+}
+```
+
+### Get Theme Videos
+
+Retrieves all forms (glosses) associated with a specific theme.
+
+#### Endpoint
+
+```
+GET /web/zin/api/getThemeVideos.php
+```
+
+#### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| theme | string | Yes | The name of the theme to retrieve forms for |
+
+#### Response Format
+
+```json
+{
+  "success": true,
+  "data": {
+    "theme": "ThemeName",
+    "count": 10,
+    "forms": [
+      {
+        "id": 123,
+        "senses": ["sense1", "sense2"],
+        "type": "glos"
+      },
+      {
+        "id": 124,
+        "senses": ["sense3"],
+        "type": "glos"
+      },
+      ...
+    ]
+  },
+  "errors": [],
+  "response_time": 0.123
+}
+```
+
+#### Usage Workflow
+
+The Theme API is designed for a two-step process:
+
+1. Call `getThemas.php` to get a list of all available themes
+2. When a user selects a theme, call `getThemeVideos.php?theme=ThemeName` to get all forms associated with that theme
+3. For each form, use the existing `getVideos.php?id={formId}&type=glos` endpoint to retrieve the actual video data
+
+This approach allows for efficient loading and browsing of themed content.
+
+### Examples
+
+#### Get All Themes Example
+
+```bash
+curl -X GET \
+  'http://your-domain.com/web/zin/api/getThemas.php'
+```
+
+#### Get Forms for a Theme Example
+
+```bash
+curl -X GET \
+  'http://your-domain.com/web/zin/api/getThemeVideos.php?theme=Animals'
+```
+
+#### Get Video for a Form from a Theme
+
+```bash
+# After getting the form ID from getThemeVideos.php
+curl -X GET \
+  'http://your-domain.com/web/zin/api/getVideos.php?id=123&type=glos'
+```
 
 ## Testing Interface
 

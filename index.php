@@ -6,6 +6,8 @@ require_once 'src/config/ErrorReporting.php';
 require_once 'src/services/ApiLogger.php';
 require_once 'src/services/SearchService.php';
 require_once 'src/services/SuggestionService.php';
+require_once 'src/services/VideoService.php'; // Add VideoService
+require_once 'src/services/MocapService.php'; // Add MocapService
 
 // Set security headers
 SecurityHeaders::setHeaders();
@@ -40,7 +42,9 @@ try {
 
     // Initialize services
     $logger = new ApiLogger($conn);
-    $searchService = new SearchService($conn, $response);
+    $videoService = new VideoService($conn, $response, $logger);
+    $mocapService = new MocapService($conn, $response, $logger);
+    $searchService = new SearchService($conn, $response, $videoService, $mocapService);
     $suggestionService = new SuggestionService($conn, $response);
 
     // Check if this is a suggestions request
