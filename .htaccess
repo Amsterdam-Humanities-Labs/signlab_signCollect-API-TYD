@@ -1,2 +1,36 @@
 php_flag display_errors on
 php_value error_reporting -1
+
+RewriteEngine On
+
+# Prevent direct access to .php files except index.php and specific allowed files
+RewriteCond %{THE_REQUEST} ^[A-Z]{3,}\s([^\s]+)\.php [NC]
+RewriteCond %{REQUEST_URI} !/index\.php$ [NC]
+RewriteCond %{REQUEST_URI} !/getVideos\.php$ [NC]
+RewriteCond %{REQUEST_URI} !/getThemas\.php$ [NC]
+RewriteCond %{REQUEST_URI} !/getThemeVideos\.php$ [NC]
+RewriteCond %{REQUEST_URI} !/submit\.php$ [NC] # If submit.php needs to be directly accessible
+RewriteRule ^(.*)\.php$ /$1 [R=301,L]
+
+# Route for search: /search/query
+RewriteRule ^search/(.+)$ index.php?query=$1 [L,QSA]
+
+# Route for videos: /videos/type/id
+RewriteRule ^videos/([^/]+)/([^/]+)$ getVideos.php?type=$1&id=$2 [L,QSA]
+
+# Route for themes list: /themas
+RewriteRule ^themas$ getThemas.php [L,QSA]
+
+# Route for glosses by theme: /thema/themeName
+RewriteRule ^thema/(.+)$ getThemeVideos.php?theme=$1 [L,QSA]
+
+# Route for suggestions (POST to index.php)
+# This rule assumes that suggestions are handled by index.php when a specific POST variable is set.
+# If suggestions have a dedicated endpoint, adjust accordingly.
+RewriteRule ^suggestions$ index.php [L,QSA]
+
+# Standard front controller, if not already handled by specific rules
+# This will pass the request to index.php, which can then parse the path if needed.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php?path=$1 [L,QSA]

@@ -81,8 +81,8 @@ class SentenceService
         
         // Prepare the final response
         return [
-            "ID" => $sentence['ID'] ?? null,
-            "zinString" => $sentence['zinString'] ?? "",
+            "id" => $sentence['ID'] ?? null,
+            "zinstring" => $sentence['zinString'] ?? "",
             "Nederlands" => "", // Providing empty default for non-existent column
             "Gebaar_voor_Gebaar" => "", // Providing empty default for non-existent column
             "Signbank_ID_glossen" => "", // Providing empty default for non-existent column

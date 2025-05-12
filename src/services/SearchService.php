@@ -337,13 +337,13 @@ class SearchService
                 
                 while ($sentence = $sentenceResult->fetch_assoc()) {
                     // Check if we already have this sentence using in_array
-                    $exists = in_array($sentence['ID'], array_column($sentenceMatches, 'ID'));
+                    $exists = in_array($sentence['ID'], array_column($sentenceMatches, 'id')); // Changed 'ID' to 'id' for the check key
                     
                     if (!$exists) {
                         // Include theme in the basic sentence info
                         $sentenceMatches[] = [
-                            "ID" => $sentence['ID'] ?? null,
-                            "zinString" => $sentence['zinString'] ?? "",
+                            "id" => $sentence['ID'] ?? null, // Changed "ID" to "id"
+                            "zinstring" => $sentence['zinString'] ?? "", // Changed "zinString" to "zinstring"
                             "theme" => $sentence['theme'] ?? "Unknown",
                             "type" => "zin" // Add type for frontend to know which endpoint to call
                         ];
