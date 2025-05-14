@@ -59,6 +59,9 @@ try {
                 'lemmas' => [],
                 'synonyms' => []
             ];
+            if (!headers_sent()) {
+                http_response_code(200);
+            }
             echo json_encode($response);
             exit;
         }
@@ -74,6 +77,9 @@ try {
         $responseTime = microtime(true) - $startTime;
         $response['response_time'] = $responseTime;
         
+        if (!headers_sent()) {
+            http_response_code(200);
+        }
         echo json_encode($response);
         exit;
     }
@@ -226,6 +232,9 @@ try {
         $response['debug']['exception'] = $e->getMessage();
         $response['debug']['exception_trace'] = $e->getTraceAsString();
     }
+    if (!headers_sent()) {
+        http_response_code(500);
+    }
     
     // Log the error (always log full details regardless of environment)
     if (isset($logger)) {
@@ -245,6 +254,19 @@ $response['debug']['mysql_version'] = $conn->server_info ?? 'Unknown';
 if (isset($logger) && isset($conn) && $conn) {
     $logger->logRequest('info', '', 'success', '', $responseTime);
     $conn->close();
+}
+
+if (!headers_sent()) {
+    if ($response['success']) {
+        http_response_code(200);
+    } else {
+        // If success is false, a specific error code (400 or 500) should have been set.
+        // If for some reason it's still the default (200 or not set), set to 500.
+        $php_response_code_val = http_response_code();
+        if ($php_response_code_val === 200 || $php_response_code_val === false) {
+            http_response_code(500);
+        }
+    }
 }
 
 // Include PHP error log information if any errors occurred

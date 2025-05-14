@@ -254,6 +254,11 @@ class SearchService
                         $this->response['debug']['senses_json_error'] = json_last_error_msg();
                     }
                 }
+                
+                // Ensure senses is always an array
+                if (isset($word['senses']) && is_string($word['senses'])) {
+                    $word['senses'] = json_decode($word['senses'], true) ?? [];
+                }
             }
         } else {
             // If no word matches are found, use the search query itself as a lemma
@@ -341,10 +346,14 @@ class SearchService
                     
                     if (!$exists) {
                         // Include theme in the basic sentence info
+                        $theme = $sentence['theme'] ?? "Unknown";
+                        $theme = strtolower($theme);
+                        $theme = ucfirst($theme);
+
                         $sentenceMatches[] = [
                             "id" => $sentence['ID'] ?? null, // Changed "ID" to "id"
                             "zinstring" => $sentence['zinString'] ?? "", // Changed "zinString" to "zinstring"
-                            "theme" => $sentence['theme'] ?? "Unknown",
+                            "theme" => $theme,
                             "type" => "zin" // Add type for frontend to know which endpoint to call
                         ];
                     }
@@ -371,8 +380,8 @@ class SearchService
         
         if (!empty($lemmas)) {
             foreach ($lemmas as $lemma) {
-                // Updated query to include theme field
-                $sql = "SELECT id, senses, signbank, theme FROM form_data WHERE JSON_CONTAINS(CAST(IF(senses = '', '[]', senses) AS JSON), JSON_QUOTE(?)) AND extern = '1' AND glosZichtbaar = '0' LIMIT ?, ? ";
+                // Ensure senses is always an array before processing
+                $sql = "SELECT id, CAST(IF(senses = '', '[]', senses) AS JSON) AS senses, signbank, theme FROM form_data WHERE JSON_CONTAINS(senses, JSON_QUOTE(?)) AND extern = '1' AND glosZichtbaar = '0' LIMIT ?, ? ";
                 $this->response['debug']['form_data_query'] = $sql;
                 
                 $stmt = $this->conn->prepare($sql);
@@ -422,12 +431,21 @@ class SearchService
                                 }
                             }
                             
+                            // Ensure senses is always an array
+                            if (isset($form['senses']) && is_string($form['senses'])) {
+                                $form['senses'] = json_decode($form['senses'], true) ?? [];
+                            }
+                            
                             // Include theme in basic form info
+                            $theme = $form['theme'] ?? "Unknown";
+                            $theme = strtolower($theme);
+                            $theme = ucfirst($theme);
+
                             $formMatches[] = [
                                 "id" => $form['id'],
                                 "senses" => $sensesArray, // Now using array format like sb_records
                                 "signbank" => $form['signbank'] ?? "",
-                                "theme" => $form['theme'] ?? "Unknown",
+                                "theme" => $theme,
                                 "type" => "glos", // Add type for frontend to know which endpoint to call
                                 "source" => "form_data"
                             ];
