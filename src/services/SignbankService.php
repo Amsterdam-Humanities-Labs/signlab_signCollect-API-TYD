@@ -132,14 +132,18 @@ class SignbankService
                     // Handle comma-separated phrases
                     if (is_string($value)) {
                         $phrases = array_map('trim', explode(',', $value));
+                        // Process each phrase to remove -A to -Z patterns and capitalize properly
+                        $phrases = array_map([$this, 'processSenseValue'], $phrases);
                         $formattedSenses[$key] = [
                             'original' => $value,
                             'phrases' => $phrases
                         ];
                     } else {
+                        // Process single value
+                        $processedValue = $this->processSenseValue($value);
                         $formattedSenses[$key] = [
                             'original' => $value,
-                            'phrases' => [$value]
+                            'phrases' => [$processedValue]
                         ];
                     }
                 }
@@ -215,5 +219,29 @@ class SignbankService
         }
         
         return $matchedRecords;
+    }
+
+    /**
+     * Process senses values by removing -A to -Z patterns and capitalizing properly
+     *
+     * @param string $senseValue The sense value to process
+     * @return string Processed sense value
+     */
+    private function processSenseValue($senseValue)
+    {
+        if (!is_string($senseValue) || empty($senseValue)) {
+            return $senseValue;
+        }
+        
+        // Check if senseValue ends with hyphen followed by a single uppercase letter (A-Z)
+        // If that's the case then remove it
+        // Examples: AAP-A -> AAP, PANNENKOEK-D -> PANNENKOEK
+        // But keep: PANNENKOEK-BAKKEN (multiple letters after hyphen)
+        if (preg_match('/-[A-Z]$/', $senseValue)) {
+            $senseValue = preg_replace('/-[A-Z]$/', '', $senseValue);
+        }
+        
+        // Lowercase the string except the first letter
+        return ucfirst(strtolower($senseValue));
     }
 }

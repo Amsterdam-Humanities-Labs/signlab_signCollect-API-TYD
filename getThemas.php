@@ -30,6 +30,7 @@ if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheTime) {
         http_response_code(200);
     }
     readfile($cacheFile);
+    // echo "getting from cache";
     exit;
 }
 

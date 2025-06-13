@@ -29,6 +29,8 @@ if (!defined('SUBTITLE_BASE_URL')) {
 require_once 'TestVideoServices.php';
 require_once 'TestSearchServices.php';
 require_once 'TestSentenceServices.php';
+require_once 'TestFormServices.php';
+require_once 'TestSearchServicesPriority.php';
 
 // Determine if running from CLI or browser
 $isCli = php_sapi_name() === 'cli';
@@ -177,6 +179,8 @@ if (!$isCli) {
 $runner->addTestClass(new TestVideoServices());
 $runner->addTestClass(new TestSearchServices());
 $runner->addTestClass(new TestSentenceServices());
+$runner->addTestClass(new TestFormServices());
+$runner->addTestClass(new TestSearchServicesPriority());
 
 // Run tests
 $runner->runTests();

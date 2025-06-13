@@ -8,6 +8,8 @@ class SearchService
     private $response;
     private $videoService; // Property for VideoService
     private $mocapService; // New property for MocapService
+    private $nmmService;   // New property for NmmService
+    private $formService;  // New property for FormService
     
     /**
      * Constructor
@@ -16,13 +18,17 @@ class SearchService
      * @param array $response Reference to response array
      * @param VideoService $videoService Optional VideoService instance
      * @param MocapService $mocapService Optional MocapService instance
+     * @param NmmService $nmmService Optional NmmService instance
+     * @param FormService $formService Optional FormService instance
      */
-    public function __construct($conn, &$response, $videoService = null, $mocapService = null)
+    public function __construct($conn, &$response, $videoService = null, $mocapService = null, $nmmService = null, $formService = null)
     {
         $this->conn = $conn;
         $this->response = &$response;
         $this->videoService = $videoService;
         $this->mocapService = $mocapService;
+        $this->nmmService = $nmmService; // Assign NmmService
+        $this->formService = $formService; // Assign FormService
     }
     
     /**
@@ -40,101 +46,279 @@ class SearchService
         // Handle empty searches - return empty result structure
         if (empty($searchQuery)) {
             return [
+                // Ensure all expected keys are present even if empty
                 'words' => [],
                 'sentences' => [],
-                'glosses' => [], // Changed from forms and sb_records to glosses
+                'glosses' => [],
                 'synonyms' => []
             ];
         }
         
         // Sanitize input to prevent SQL injection
-        $searchQuery = $this->sanitizeInput($searchQuery);
+        $searchQuerySanitized = $this->sanitizeInput($searchQuery); // Use a different var for sanitized query if original is needed elsewhere
         
         // Get raw search results
-        $formResults = $this->searchForms($searchQuery, $offset, $limit);
-        $sbResults = $this->searchSignbank($searchQuery, $offset, $limit);
+        $formResults = $this->searchForms($searchQuerySanitized, $offset, $limit);
+        // $sbResults = $this->searchSignbank($searchQuery, $offset, $limit); // Temporarily disabled Signbank search
         
-        // Merge forms and sb_records into glosses with duplicate removal
-        $glosses = $this->mergeGlosses($formResults, $sbResults);
+        // Get FormService search results (priority over NMM)
+        $formServiceResults = [];
+        if ($this->formService) {
+            $formServiceResults = $this->formService->searchFormsByGlos($searchQuery);
+            $this->response['debug']['form_service_search_count'] = count($formServiceResults);
+        }
+        
+        $nmmResults = [];
+        if ($this->nmmService) {
+            $nmmResults = $this->nmmService->searchNmmByGlos($searchQuery); // Use original $searchQuery for NMM service if it does its own sanitization or needs original form
+            // Add the NMM query to debug, using a representation of the query
+            $searchPatternNmm = $searchQuery . '%'; // Pattern used in NmmService
+            $this->response['debug']['nmm_data_query'] = "SELECT id, name, description, type, signbank_id, glos FROM nmm_data WHERE glos LIKE '" . $this->conn->real_escape_string($searchPatternNmm) . "'";
+        }
+        
+        // Merge forms, (sb_records), nmm_records, and form_service_results into glosses with duplicate removal and priority
+        $glosses = $this->mergeGlosses($formResults, [], $nmmResults, $formServiceResults); // Pass empty array for sbRecords, and new formServiceResults
         
         $results = [
-            'words' => $this->searchWords($searchQuery),
-            'sentences' => $this->searchSentences($searchQuery, $offset, $limit),
+            'words' => $this->searchWords($searchQuerySanitized),
+            'sentences' => $this->searchSentences($searchQuerySanitized, $offset, $limit),
             'glosses' => $glosses, // New combined glosses field
-            'synonyms' => $this->searchSynonyms($searchQuery, $offset, $limit)
+            'synonyms' => $this->searchSynonyms($searchQuerySanitized, $offset, $limit)
         ];
         
         return $this->sanitizeResults($results);
     }
     
     /**
-     * Merge forms and SignBank records into a single glosses array with duplicates removed
+     * Merge forms, SignBank records, NMM records, and FormService results into a single glosses array with duplicates removed
+     * Priority: FormService > NMM when glos values overlap
      * 
-     * @param array $forms Form data results
-     * @param array $sbRecords SignBank records results
+     * @param array $forms Form data results (from searchForms)
+     * @param array $sbRecords SignBank records results (will be empty if Signbank search is disabled)
+     * @param array $nmmRecords NMM records results
+     * @param array $formServiceResults FormService search results (highest priority)
      * @return array Merged glosses without duplicates
      */
-    private function mergeGlosses($forms, $sbRecords)
+    private function mergeGlosses($forms, $sbRecords, $nmmRecords = [], $formServiceResults = [])
     {
         $glosses = [];
-        $processedGlosses = []; // Track processed glosses to avoid duplicates
-        
-        // Process form_data entries first
+        $processedGlosses = []; // Track processed glosses (primary display string) to avoid duplicates
+        $formServiceGlosValues = []; // Track glos values from FormService for priority system
+
+        // Helper function to check for forbidden pattern (e.g., "-B" through "-Z")
+        $checkForbiddenPattern = function($text) {
+            if (!is_string($text) || empty($text)) {
+                return false;
+            }
+            // Matches a hyphen followed by an uppercase letter from B to Z
+            return preg_match('/-[B-Z]/', $text) === 1;
+        };
+
+        // Process FormService results FIRST (highest priority)
+        foreach ($formServiceResults as $formServiceItem) {
+            $formServiceGlosValue = $formServiceItem['glos'] ?? null;
+
+            if ($formServiceGlosValue && $checkForbiddenPattern($formServiceGlosValue)) {
+                $this->response['debug']['filter_skipped_formservice_by_glos_pattern'][] = ['id' => $formServiceItem['id'] ?? 'unknown', 'glos_field' => $formServiceGlosValue];
+                continue;
+            }
+
+            $glosDisplayFormService = $formServiceGlosValue ?? '';
+            $processedFormServiceGlosValue = $this->processSenseValue($formServiceGlosValue);
+
+            if (!empty($glosDisplayFormService) && !in_array($glosDisplayFormService, $processedGlosses)) {
+                $processedGlosses[] = $glosDisplayFormService;
+                $formServiceGlosValues[] = $glosDisplayFormService; // Track for priority
+
+                // Process senses array from FormService
+                $sensesArray = [];
+                if (!empty($formServiceItem['senses'])) {
+                    $decodedSenses = is_string($formServiceItem['senses']) ? json_decode($formServiceItem['senses'], true) : $formServiceItem['senses'];
+                    if (is_array($decodedSenses)) {
+                        $sensesArray = $this->processSensesArray($decodedSenses);
+                    } elseif (is_string($decodedSenses)) {
+                        $sensesArray = [$this->processSenseValue($decodedSenses)];
+                    }
+                }
+
+                $mappedFormServiceItem = [
+                    "id" => $formServiceItem['id'],
+                    "senses" => !empty($sensesArray) ? $sensesArray : [$processedFormServiceGlosValue],
+                    "signbank" => $formServiceItem['signbank'] ?? null,
+                    "thema" => $formServiceItem['thema'] ?? "Unknown",
+                    "type" => "glos",
+                    "source" => "form_service", // Mark as FormService source
+                    "videos" => $formServiceItem['videos'] ?? ['videoLeft' => null, 'videoCenter' => null, 'videoRight' => null],
+                    "mocap" => false,
+                    "nmm_data" => $formServiceItem['nmm_data'] ?? []
+                ];
+                $glosses[] = $mappedFormServiceItem;
+                $this->response['debug']['added_formservice_glos'][] = $glosDisplayFormService;
+            }
+        }
+
+        // Process form_data entries
         foreach ($forms as $form) {
-            $glos = '';
-            
-            // Extract first sense item from array for processing
-            if (isset($form['senses']) && is_array($form['senses']) && !empty($form['senses'])) {
-                $glos = $form['senses'][0] ?? '';
-            } elseif (isset($form['senses']) && is_string($form['senses'])) {
-                // Handle old format if still encountered
-                $decoded = json_decode($form['senses'], true);
-                $glos = is_array($decoded) && !empty($decoded) ? $decoded[0] : $form['senses'];
+            $formShouldBeSkipped = false;
+
+            // Check 'glos' field from form_data (actual column value)
+            $formGlosField = $form['glos'] ?? null; 
+            if ($formGlosField && $checkForbiddenPattern($formGlosField)) {
+                $formShouldBeSkipped = true;
+                $this->response['debug']['filter_skipped_form_by_glos_pattern'][] = ['id' => $form['id'] ?? 'unknown', 'glos_field' => $formGlosField];
+            }
+
+            // Check 'senses' field (array of strings) if not already skipped
+            if (!$formShouldBeSkipped && isset($form['senses']) && is_array($form['senses'])) {
+                foreach ($form['senses'] as $senseItem) {
+                    if ($checkForbiddenPattern($senseItem)) {
+                        $formShouldBeSkipped = true;
+                        $this->response['debug']['filter_skipped_form_by_senses_pattern'][] = ['id' => $form['id'] ?? 'unknown', 'sense_item' => $senseItem];
+                        break; 
+                    }
+                }
             }
             
-            if (!empty($glos) && !in_array($glos, $processedGlosses)) {
-                $processedGlosses[] = $glos;
+            if ($formShouldBeSkipped) {
+                continue; // Skip this form
+            }
+
+            // Original logic for $glosDisplay for duplicate checking (based on first sense)
+            $glosDisplay = '';
+            if (isset($form['senses']) && is_array($form['senses']) && !empty($form['senses'])) {
+                $glosDisplay = $form['senses'][0] ?? '';
+            } elseif (isset($form['senses']) && is_string($form['senses'])) {
+                // Handle old format if still encountered (less likely with CAST AS JSON)
+                $decoded = json_decode($form['senses'], true);
+                $glosDisplay = is_array($decoded) && !empty($decoded) ? $decoded[0] : $form['senses'];
+            }
+
+            if (!empty($glosDisplay) && !in_array($glosDisplay, $processedGlosses)) {
+                $processedGlosses[] = $glosDisplay;
                 
-                // Check for mocap data
+                // Process senses array to remove -A to -Z patterns and capitalize properly
+                if (isset($form['senses']) && is_array($form['senses'])) {
+                    $form['senses'] = $this->processSensesArray($form['senses']);
+                }
+                
                 if ($this->mocapService !== null) {
-                    $form['mocap'] = $this->mocapService->hasMocapData($glos);
-                    $this->response['debug']['form_' . $form['id'] . '_mocap'] = $form['mocap'];
+                    $form['mocap'] = $this->mocapService->hasMocapData($glosDisplay); 
                 } else {
                     $form['mocap'] = false;
                 }
-                
                 $glosses[] = $form;
             }
+            // Note: Original code did not have an else-if for empty glosDisplay to add by ID,
+            // so items with empty glosDisplay (after filtering) won't be added.
         }
         
-        // Process sb_records and add only non-duplicates
+        // Process sb_records (this part is effectively disabled if $sbRecords is always an empty array from search method)
         foreach ($sbRecords as $record) {
-            $annotationIdGloss = $record['annotation_id_gloss_dutch'] ?? '';
+            $glosDisplay = $record['annotation_id_gloss_dutch'] ?? '';
             
-            // If annotation_id_gloss_dutch is empty, use the id as a fallback to ensure we include the record
-            if (empty($annotationIdGloss) && isset($record['id'])) {
-                $annotationIdGloss = 'sb_' . $record['id'];
+            if (empty($glosDisplay) && isset($record['id'])) {
+                $glosDisplay = 'sb_' . $record['id']; // Fallback unique identifier
             }
             
-            // Skip if this gloss already exists
-            if (!empty($annotationIdGloss) && !in_array($annotationIdGloss, $processedGlosses)) {
-                $processedGlosses[] = $annotationIdGloss;
+            if (!empty($glosDisplay) && !in_array($glosDisplay, $processedGlosses)) {
+                $processedGlosses[] = $glosDisplay;
                 
-                // Check for mocap data
-                if ($this->mocapService !== null) {
-                    $record['mocap'] = $this->mocapService->hasMocapData($annotationIdGloss);
-                    $this->response['debug']['sb_record_' . $record['id'] . '_mocap'] = $record['mocap'];
-                } else {
+                if ($this->mocapService !== null && !isset($record['mocap'])) {
+                    // Example: $record['mocap'] = $this->mocapService->hasMocapData($glosDisplay, 'signbank');
+                } else if (!isset($record['mocap'])) {
                     $record['mocap'] = false;
                 }
-                
                 $glosses[] = $record;
             }
+        }
+
+        // Process NMM records (lower priority than FormService)
+        foreach ($nmmRecords as $nmmItem) {
+            $nmmGlosValue = $nmmItem['glos'] ?? null; // Actual 'glos' field from nmm_data
+
+            if ($nmmGlosValue && $checkForbiddenPattern($nmmGlosValue)) {
+                $this->response['debug']['filter_skipped_nmm_by_glos_pattern'][] = ['id' => $nmmItem['id'] ?? 'unknown', 'glos_field' => $nmmGlosValue];
+                continue; // Skip this NMM item
+            }
+
+            $glosDisplayNMM = $nmmGlosValue ?? ''; // Use NMM 'glos' for duplicate check and as primary sense
+
+            // PRIORITY SYSTEM: Skip if FormService already has this glos value
+            if (!empty($glosDisplayNMM) && in_array($glosDisplayNMM, $formServiceGlosValues)) {
+                $this->response['debug']['skipped_nmm_for_formservice_priority'][] = [
+                    'nmm_id' => $nmmItem['id'] ?? 'unknown', 
+                    'glos_value' => $glosDisplayNMM,
+                    'reason' => 'FormService takes priority'
+                ];
+                continue; // Skip this NMM item as FormService has priority
+            }
+
+            // Process the NMM glos value using the helper function
+            $processedNmmGlosValue = $this->processSenseValue($nmmGlosValue);
+
+            if (!empty($glosDisplayNMM) && !in_array($glosDisplayNMM, $processedGlosses)) {
+                $processedGlosses[] = $glosDisplayNMM;
+                
+                $mappedNmmItem = [
+                    "id" => $nmmItem['id'],
+                    "senses" => $processedNmmGlosValue ? [$processedNmmGlosValue] : [], // Use processed NMM 'glos' field as the primary sense in an array
+                    "signbank" => $nmmItem['signbank_id'] ?? null,
+                    "thema" => $nmmItem['thema'] ?? "Unknown", 
+                    "type" => "glos", // Standardize type for the merged list
+                    "source" => "nmm_data",
+                    "videos" => $nmmItem['videos'] ?? ['videoLeft' => null, 'videoCenter' => null, 'videoRight' => null],
+                    "mocap" => false, // NMM data does not have mocap information
+                    "nmm_type" => $nmmItem['type'] ?? '', 
+                    "zelfopname" => $nmmItem['zelfopname'] ?? null
+                ];
+                $glosses[] = $mappedNmmItem;
+                $this->response['debug']['added_nmm_glos'][] = $glosDisplayNMM;
+            }
+            // Note: Original code did not have an else-if for empty glosDisplayNMM to add by ID.
         }
         
         return $glosses;
     }
     
+    /**
+     * Process senses values by removing -A to -Z patterns and capitalizing properly
+     *
+     * @param string $senseValue The sense value to process
+     * @return string Processed sense value
+     */
+    private function processSenseValue($senseValue)
+    {
+        if (!is_string($senseValue) || empty($senseValue)) {
+            return $senseValue;
+        }
+        
+        // Check if senseValue ends with hyphen followed by a single uppercase letter (A-Z)
+        // If that's the case then remove it
+        // Examples: AAP-A -> AAP, PANNENKOEK-D -> PANNENKOEK
+        // But keep: PANNENKOEK-BAKKEN (multiple letters after hyphen)
+        if (preg_match('/-[A-Z]$/', $senseValue)) {
+            $senseValue = preg_replace('/-[A-Z]$/', '', $senseValue);
+        }
+        
+        // Lowercase the string except the first letter
+        return ucfirst(strtolower($senseValue));
+    }
+
+    /**
+     * Process an array of senses values
+     *
+     * @param array $sensesArray The array of sense values to process
+     * @return array Processed senses array
+     */
+    private function processSensesArray($sensesArray)
+    {
+        if (!is_array($sensesArray)) {
+            return $sensesArray;
+        }
+        
+        return array_map([$this, 'processSenseValue'], $sensesArray);
+    }
+
     /**
      * Sanitize user input for database queries
      *
@@ -255,9 +439,14 @@ class SearchService
                     }
                 }
                 
-                // Ensure senses is always an array
+                // Ensure senses is always an array and process it
                 if (isset($word['senses']) && is_string($word['senses'])) {
                     $word['senses'] = json_decode($word['senses'], true) ?? [];
+                }
+                
+                // Process the senses array to remove -A to -Z patterns and capitalize properly
+                if (isset($word['senses']) && is_array($word['senses'])) {
+                    $word['senses'] = $this->processSensesArray($word['senses']);
                 }
             }
         } else {
@@ -310,8 +499,8 @@ class SearchService
         
         if (!empty($lemmas)) {
             foreach ($lemmas as $lemma) {
-                // Updated query to include theme field
-                $sql = "SELECT ID, zinString, theme FROM sentences WHERE JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?) LIMIT ?, ?";
+                // Updated query to include thema field from sentences table
+                $sql = "SELECT ID, zinString, IFNULL(thema, 'Unknown') as thema FROM sentences WHERE JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?) LIMIT ?, ?";
                 $this->response['debug']['sentences_query'] = $sql;
                 
                 $stmt = $this->conn->prepare($sql);
@@ -345,17 +534,32 @@ class SearchService
                     $exists = in_array($sentence['ID'], array_column($sentenceMatches, 'id')); // Changed 'ID' to 'id' for the check key
                     
                     if (!$exists) {
-                        // Include theme in the basic sentence info
-                        $theme = $sentence['theme'] ?? "Unknown";
-                        $theme = strtolower($theme);
-                        $theme = ucfirst($theme);
+                        // First check if there's at least one row in matched_transcriptions with matching criteria
+                        $hasMatchedTranscription = false;
+                        $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'zin' AND added = '1' LIMIT 1");
+                        if ($checkStmt) {
+                            $checkStmt->bind_param("i", $sentence['ID']);
+                            if ($checkStmt->execute()) {
+                                $checkResult = $checkStmt->get_result();
+                                $hasMatchedTranscription = $checkResult->num_rows > 0;
+                            }
+                            $checkStmt->close();
+                        }
+                        
+                        // Only add the sentence if it has a matching transcription
+                        if ($hasMatchedTranscription) {
+                            // Include thema in the basic sentence info
+                            $thema = $sentence['thema'] ?? "Unknown"; // Changed from theme to thema
+                            $thema = strtolower($thema);
+                            $thema = ucfirst($thema);
 
-                        $sentenceMatches[] = [
-                            "id" => $sentence['ID'] ?? null, // Changed "ID" to "id"
-                            "zinstring" => $sentence['zinString'] ?? "", // Changed "zinString" to "zinstring"
-                            "theme" => $theme,
-                            "type" => "zin" // Add type for frontend to know which endpoint to call
-                        ];
+                            $sentenceMatches[] = [
+                                "id" => $sentence['ID'] ?? null, // Changed "ID" to "id"
+                                "zinstring" => $sentence['zinString'] ?? "", // Changed "zinString" to "zinstring"
+                                "thema" => $thema, // Changed from theme to thema
+                                "type" => "zin" // Add type for frontend to know which endpoint to call
+                            ];
+                        }
                     }
                 }
             }
@@ -376,85 +580,96 @@ class SearchService
     private function searchForms($searchQuery, $offset, $limit)
     {
         $formMatches = [];
-        $lemmas = $this->getLemmas($searchQuery);
-        
-        if (!empty($lemmas)) {
-            foreach ($lemmas as $lemma) {
-                // Ensure senses is always an array before processing
-                $sql = "SELECT id, CAST(IF(senses = '', '[]', senses) AS JSON) AS senses, signbank, theme FROM form_data WHERE JSON_CONTAINS(senses, JSON_QUOTE(?)) AND extern = '1' AND glosZichtbaar = '0' LIMIT ?, ? ";
-                $this->response['debug']['form_data_query'] = $sql;
-                
-                $stmt = $this->conn->prepare($sql);
-                if (!$stmt) {
-                    $this->response['debug']['form_data_prepare_error'] = $this->conn->error;
-                    continue;
-                }
-                
-                // Bind one string and two integers (offset, limit)
-                $stmt->bind_param("sii", $lemma, $offset, $limit);
-                
-                if (!$stmt->execute()) {
-                    $this->response['debug']['form_data_execute_error'] = $stmt->error;
-                    $stmt->close();
-                    continue;
-                }
-                
-                $formResult = $stmt->get_result();
-                $stmt->close();
-                
-                $this->response['debug']['forms_found_for_lemma_' . $lemma] = $formResult->num_rows;
-                
-                while ($form = $formResult->fetch_assoc()) {
-                    // Check if we already have this form using in_array
-                    $exists = in_array($form['id'], array_column($formMatches, 'id'));
-                    
-                    if (!$exists) {
-                        // Check if there are any videos associated with this form
-                        $hasVideos = true;
-                        
-                        if ($this->videoService !== null) {
-                            $videos = $this->videoService->getVideosForEntity($form['id'], 'glos');
-                            $hasVideos = !empty($videos['videoLeft']) || !empty($videos['videoCenter']) || !empty($videos['videoRight']);
-                            $this->response['debug']['form_' . $form['id'] . '_has_videos'] = $hasVideos;
-                        }
-                        
-                        // Only add the form if it has associated videos
-                        if ($hasVideos) {
-                            // Convert senses from JSON string to array format
-                            $sensesArray = [];
-                            if (!empty($form['senses'])) {
-                                $decodedSenses = json_decode($form['senses'], true);
-                                if (is_array($decodedSenses)) {
-                                    $sensesArray = $decodedSenses;
-                                } elseif (is_string($decodedSenses)) {
-                                    $sensesArray = [$decodedSenses];
-                                }
-                            }
-                            
-                            // Ensure senses is always an array
-                            if (isset($form['senses']) && is_string($form['senses'])) {
-                                $form['senses'] = json_decode($form['senses'], true) ?? [];
-                            }
-                            
-                            // Include theme in basic form info
-                            $theme = $form['theme'] ?? "Unknown";
-                            $theme = strtolower($theme);
-                            $theme = ucfirst($theme);
+        // Remove lemma generation, use searchQuery directly for LIKE search
+        // $lemmas = $this->getLemmas($searchQuery);
 
-                            $formMatches[] = [
-                                "id" => $form['id'],
-                                "senses" => $sensesArray, // Now using array format like sb_records
-                                "signbank" => $form['signbank'] ?? "",
-                                "theme" => $theme,
-                                "type" => "glos", // Add type for frontend to know which endpoint to call
-                                "source" => "form_data"
-                            ];
+        if (!empty($searchQuery)) { // Proceed if searchQuery is not empty
+            // Prepare the search pattern for LIKE query
+            $searchPattern = $searchQuery . '%';
+
+            // Query form_data using LIKE on the 'glos' field
+            // Select 'glos' field as well, and 'senses' for consistent output structure.
+            // Keep existing filters: extern = '1' AND glosZichtbaar = '0'
+            // Note: Column name varies between databases - 'theme' in test, 'thema' in production
+            $sql = "SELECT id, CAST(IF(senses = '', '[]', senses) AS JSON) AS senses, signbank, 
+                           IFNULL(thema, 'Unknown') as thema, glos 
+                    FROM form_data 
+                    WHERE glos LIKE ? AND extern = '1' AND glosZichtbaar = '0' 
+                    LIMIT ?, ?";
+            
+            $this->response['debug']['form_data_query'] = $sql;
+            $this->response['debug']['form_data_search_pattern'] = $searchPattern;
+
+            $stmt = $this->conn->prepare($sql);
+            if (!$stmt) {
+                $this->response['debug']['form_data_prepare_error'] = $this->conn->error;
+                // Return empty array or handle error as appropriate
+                return $formMatches; 
+            }
+
+            // Bind searchPattern (string), offset (int), limit (int)
+            $stmt->bind_param("sii", $searchPattern, $offset, $limit);
+
+            if (!$stmt->execute()) {
+                $this->response['debug']['form_data_execute_error'] = $stmt->error;
+                $stmt->close();
+                // Return empty array or handle error
+                return $formMatches; 
+            }
+
+            $formResult = $stmt->get_result();
+            $stmt->close();
+
+            $this->response['debug']['forms_found_for_pattern_' . $searchPattern] = $formResult->num_rows;
+
+            while ($form = $formResult->fetch_assoc()) {
+                // Check if we already have this form using in_array
+                $exists = in_array($form['id'], array_column($formMatches, 'id'));
+
+                if (!$exists) {
+                    // Check if there are any videos associated with this form
+                    $hasVideos = true; // Assume true, or implement video check if needed
+
+                    if ($this->videoService !== null) {
+                        $videos = $this->videoService->getVideosForEntity($form['id'], 'glos');
+                        $hasVideos = !empty($videos['videoLeft']) || !empty($videos['videoCenter']) || !empty($videos['videoRight']);
+                        $this->response['debug']['form_' . $form['id'] . '_has_videos'] = $hasVideos;
+                    }
+
+                    if ($hasVideos) {
+                        // Senses processing (already handles JSON string to array)
+                        $sensesArray = [];
+                        if (!empty($form['senses'])) { // Senses might be JSON string or already array from CAST
+                            $decodedSenses = is_string($form['senses']) ? json_decode($form['senses'], true) : $form['senses'];
+                            if (is_array($decodedSenses)) {
+                                $sensesArray = $this->processSensesArray($decodedSenses); // Process the senses array
+                            } elseif (is_string($decodedSenses)) { // Should not happen with CAST AS JSON but good fallback
+                                $sensesArray = [$this->processSenseValue($decodedSenses)]; // Process single sense value
+                            }
                         }
+                        
+                        // Thema processing
+                        $thema = $form['thema'] ?? "Unknown"; // Changed from theme to thema
+                        $thema = strtolower($thema);
+                        $thema = ucfirst($thema);
+
+                        $formMatches[] = [
+                            "id" => $form['id'],
+                            // Use the 'glos' field for the primary display if 'senses' is not suitable or empty
+                            // For now, keep 'senses' as it was, assuming it's still the desired field for display
+                            "senses" => $sensesArray, 
+                            "signbank" => $form['signbank'] ?? "",
+                            "thema" => $thema,
+                            "type" => "glos",
+                            "source" => "form_data",
+                            // Optionally include the 'glos' field if it's different from 'senses' and needed by frontend
+                            // "glos_text" => $form['glos'] 
+                        ];
                     }
                 }
             }
         }
-        
+
         $this->response['debug']['form_matches_found'] = count($formMatches);
         return array_slice($formMatches, 0, $limit);
     }
@@ -469,6 +684,11 @@ class SearchService
      */
     private function searchSignbank($searchQuery, $offset, $limit)
     {
+        // Temporarily disabled as per request
+        $this->response['debug']['searchSignbank_disabled'] = true;
+        return []; // Return empty array as Signbank search is disabled
+        
+        /* Original code below, commented out
         $sbRecordMatches = [];
         $lemmas = $this->getLemmas($searchQuery);
         
@@ -593,6 +813,9 @@ class SearchService
                             // Prioritize whole phrase matches
                             $displayPhrases = $wholePhraseMatch ? $exactMatchPhrases : $matchedPhrases;
                             
+                            // Process the display phrases to remove -A to -Z patterns and capitalize properly
+                            $displayPhrases = $this->processSensesArray($displayPhrases);
+                            
                             // Add record with all necessary fields for proper merging
                             $sbRecordMatches[] = [
                                 "id" => $record['id'],
@@ -625,6 +848,7 @@ class SearchService
         
         $this->response['debug']['sb_record_matches_found'] = count($sbRecordMatches);
         return array_slice($sbRecordMatches, 0, $limit);
+        */
     }
     
     /**
@@ -657,14 +881,18 @@ class SearchService
                     // Handle comma-separated phrases
                     if (is_string($value)) {
                         $phrases = array_map('trim', explode(',', $value));
+                        // Process each phrase to remove -A to -Z patterns and capitalize properly
+                        $phrases = array_map([$this, 'processSenseValue'], $phrases);
                         $formattedSenses[$key] = [
                             'original' => $value,
                             'phrases' => $phrases
                         ];
                     } else {
+                        // Process single value
+                        $processedValue = $this->processSenseValue($value);
                         $formattedSenses[$key] = [
                             'original' => $value,
-                            'phrases' => [$value]
+                            'phrases' => [$processedValue]
                         ];
                     }
                 }

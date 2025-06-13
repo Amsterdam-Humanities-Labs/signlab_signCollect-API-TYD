@@ -1,4 +1,31 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// --- BEGIN CLI Parameter Handling ---
+if (php_sapi_name() === 'cli') {
+    // Default to POST for CLI execution, can be overridden by an argument like REQUEST_METHOD=GET
+    $_SERVER['REQUEST_METHOD'] = 'POST'; 
+    $_POST = []; // Initialize $_POST
+
+    // Parse command line arguments (e.g., query="search term" suggestions=true)
+    // $argv[0] is the script name. Arguments start from $argv[1].
+    for ($i = 1; $i < $argc; $i++) {
+        parse_str($argv[$i], $cli_arg_output);
+        if (is_array($cli_arg_output) && count($cli_arg_output) > 0) {
+            $_POST = array_merge($_POST, $cli_arg_output);
+        }
+    }
+
+    // If a specific REQUEST_METHOD is passed as a CLI argument, use it
+    if (isset($_POST['REQUEST_METHOD'])) {
+        $_SERVER['REQUEST_METHOD'] = strtoupper($_POST['REQUEST_METHOD']);
+        unset($_POST['REQUEST_METHOD']); // Remove it from $_POST as it's a server var
+    }
+}
+// --- END CLI Parameter Handling ---
+
 // Load configuration and service files
 require_once 'src/config/config.php';
 require_once 'src/config/SecurityHeaders.php';
@@ -8,6 +35,8 @@ require_once 'src/services/SearchService.php';
 require_once 'src/services/SuggestionService.php';
 require_once 'src/services/VideoService.php'; // Add VideoService
 require_once 'src/services/MocapService.php'; // Add MocapService
+require_once 'src/services/NmmService.php';   // Add NmmService
+require_once 'src/services/FormService.php';  // Add FormService
 
 // Set security headers
 SecurityHeaders::setHeaders();
@@ -16,7 +45,7 @@ SecurityHeaders::setHeaders();
 ErrorReporting::configure();
 
 // Include the MySQL configuration file
-include '../../mysql_config_test.php';
+include '../../mysql_config.php';
 
 // Start timer
 $startTime = microtime(true);
@@ -44,7 +73,9 @@ try {
     $logger = new ApiLogger($conn);
     $videoService = new VideoService($conn, $response, $logger);
     $mocapService = new MocapService($conn, $response, $logger);
-    $searchService = new SearchService($conn, $response, $videoService, $mocapService);
+    $nmmService = new NmmService($conn, $response); // Instantiate NmmService
+    $formService = new FormService($conn, $response, $videoService, $nmmService); // Instantiate FormService
+    $searchService = new SearchService($conn, $response, $videoService, $mocapService, $nmmService, $formService); // Pass FormService
     $suggestionService = new SuggestionService($conn, $response);
 
     // Check if this is a suggestions request
@@ -56,8 +87,8 @@ try {
             $response['success'] = true;
             $response['data']['suggestions'] = [
                 'words' => [],
-                'lemmas' => [],
-                'synonyms' => []
+                // 'lemmas' => [], // Temporarily disabled
+                // 'synonyms' => [] // Temporarily disabled
             ];
             if (!headers_sent()) {
                 http_response_code(200);
@@ -70,7 +101,13 @@ try {
         $logger->logRequest('suggestions', $searchQuery);
         
         // Get suggestions
-        $response['data']['suggestions'] = $suggestionService->getSuggestions($searchQuery);
+        // $response['data']['suggestions'] = $suggestionService->getSuggestions($searchQuery); // Original line
+        $allSuggestions = $suggestionService->getSuggestions($searchQuery);
+        $response['data']['suggestions'] = [
+            'words' => $allSuggestions['words'] ?? []
+            // 'lemmas' => $allSuggestions['lemmas'] ?? [], // Temporarily disabled
+            // 'synonyms' => $allSuggestions['synonyms'] ?? [] // Temporarily disabled
+        ];
         $response['success'] = true;
         
         // Calculate response time
@@ -138,13 +175,21 @@ try {
         // Perform the search and get all results
         $results = $searchService->search($searchQuery, $offset);
         
+        // Temporarily disable synonyms in search output
+        // To re-enable, comment out the following unset line:
+        if (isset($results['synonyms'])) {
+            unset($results['synonyms']);
+        }
+        // Note: 'lemmas' were not explicitly handled at this top level of $results in the original search processing code,
+        // so no specific unset is added here for 'lemmas'. They are handled in the suggestions part.
+        
         // Filter results by type if requested
         if ($resultType !== 'all') {
             $filteredResults = [];
             
-            // Always include words and synonyms
+            // Always include words
             $filteredResults['words'] = $results['words'] ?? [];
-            $filteredResults['synonyms'] = $results['synonyms'] ?? [];
+            // $filteredResults['synonyms'] = $results['synonyms'] ?? []; // Synonyms are removed from $results above or not included
             
             // Filter by specific result type
             switch ($resultType) {
@@ -156,17 +201,21 @@ try {
                     $filteredResults['glosses'] = $results['glosses'] ?? [];
                     break;
                     
-                case 'forms': // For backward compatibility
-                    $filteredResults['glosses'] = array_filter($results['glosses'] ?? [], function($item) {
-                        return isset($item['source']) && $item['source'] === 'signcollect';
-                    });
-                    break;
+                // case 'forms': // For backward compatibility
+                //     $filteredResults['glosses'] = array_filter($results['glosses'] ?? [], function($item) {
+                //         return isset($item['source']) && $item['source'] === 'signcollect';
+                //     });
+                //     break;
                     
-                case 'sb_records': // For backward compatibility
-                    $filteredResults['glosses'] = array_filter($results['glosses'] ?? [], function($item) {
-                        return isset($item['source']) && $item['source'] === 'signbank';
-                    });
-                    break;
+                // case 'sb_records': // For backward compatibility
+                    // Temporarily disabling SignBank-specific record filtering as per request to "disable signbankservice".
+                    // If SignbankService is a deeper dependency (e.g., within SearchService), 
+                    // this change alone might not fully disable its data contribution to general gloss results.
+                    // $filteredResults['glosses'] = array_filter($results['glosses'] ?? [], function($item) {
+                    //     return isset($item['source']) && $item['source'] === 'signbank';
+                    // });
+                    // $filteredResults['glosses'] = []; // Ensure it's empty or not set for this case.
+                    // break;
                     
                 default:
                     // If an invalid type is specified, return all results
@@ -181,29 +230,30 @@ try {
         
         // Group results by theme if requested
         if ($groupByTheme && !empty($response['data'])) {
-            $grouped = ['words' => $response['data']['words'] ?? [], 'synonyms' => $response['data']['synonyms'] ?? []];
+            // $grouped = ['words' => $response['data']['words'] ?? [], 'synonyms' => $response['data']['synonyms'] ?? []]; // Original
+            $grouped = ['words' => $response['data']['words'] ?? []]; // Synonyms are no longer included in $response['data']
             
-            // Group sentences by theme
+            // Group sentences by thema
             if (!empty($response['data']['sentences'])) {
-                $grouped['sentences_by_theme'] = [];
+                $grouped['sentences_by_thema'] = []; // Changed from sentences_by_theme
                 foreach ($response['data']['sentences'] as $sentence) {
-                    $theme = $sentence['theme'] ?? 'Unknown';
-                    if (!isset($grouped['sentences_by_theme'][$theme])) {
-                        $grouped['sentences_by_theme'][$theme] = [];
+                    $thema = $sentence['thema'] ?? 'Unknown'; // Changed from theme to thema
+                    if (!isset($grouped['sentences_by_thema'][$thema])) {
+                        $grouped['sentences_by_thema'][$thema] = [];
                     }
-                    $grouped['sentences_by_theme'][$theme][] = $sentence;
+                    $grouped['sentences_by_thema'][$thema][] = $sentence;
                 }
             }
             
-            // Group glosses by theme
+            // Group glosses by thema
             if (!empty($response['data']['glosses'])) {
-                $grouped['glosses_by_theme'] = [];
+                $grouped['glosses_by_thema'] = []; // Changed from glosses_by_theme
                 foreach ($response['data']['glosses'] as $gloss) {
-                    $theme = $gloss['theme'] ?? 'Unknown';
-                    if (!isset($grouped['glosses_by_theme'][$theme])) {
-                        $grouped['glosses_by_theme'][$theme] = [];
+                    $thema = $gloss['thema'] ?? 'Unknown'; // Changed from theme to thema
+                    if (!isset($grouped['glosses_by_thema'][$thema])) {
+                        $grouped['glosses_by_thema'][$thema] = [];
                     }
-                    $grouped['glosses_by_theme'][$theme][] = $gloss;
+                    $grouped['glosses_by_thema'][$thema][] = $gloss;
                 }
             }
             
@@ -216,7 +266,7 @@ try {
         $response['success'] = true;
         $response['message'] = 'API is running. Use POST method with "query" parameter to search, or call getVideos.php with ID to fetch video data. '
                              . 'Optional parameters: resultType (all, sentences, forms, sb_records) to filter results, '
-                             . 'groupByTheme=true to group results by theme.';
+                             . 'groupByTheme=true to group results by thema.'; // Changed from theme to thema
         $logger->logRequest('info');
     }
     

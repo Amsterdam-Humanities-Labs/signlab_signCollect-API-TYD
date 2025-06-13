@@ -13,7 +13,7 @@ class ErrorReporting
     {
         if ($level === null) {
             // Default: Disable PHP warnings but keep errors
-            error_reporting(E_ERROR | E_PARSE);
+            error_reporting(E_ALL);
         } else {
             error_reporting($level);
         }

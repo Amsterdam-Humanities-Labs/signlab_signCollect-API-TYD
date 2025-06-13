@@ -215,8 +215,17 @@
                     }
                 }
             } else if (type === 'glos') {
-                titleText = `Form ID: ${videoData.id}`;
-                contentText = `Senses: ${videoData.senses || ""}`;
+                // Check if this is FormService data
+                if (videoData.source === 'form_service') {
+                    titleText = `FormService ID: ${videoData.id}`;
+                    contentText = `Senses: ${Array.isArray(videoData.senses) ? videoData.senses.join(', ') : (videoData.senses || "")}`;
+                    if (videoData.thema) {
+                        contentText += ` | Thema: ${videoData.thema}`;
+                    }
+                } else {
+                    titleText = `Form ID: ${videoData.id}`;
+                    contentText = `Senses: ${videoData.senses || ""}`;
+                }
             } else if (type === 'sb') {
                 titleText = `SignBank Record ID: ${videoData.id}`;
                 
@@ -261,7 +270,7 @@
             const pauseAllVideos = () => {
                 if (centerRef.current) centerRef.current.pause();
                 if (leftRef.current) leftRef.current.pause();
-                if (rightRef.current) leftRef.current.pause();
+                if (rightRef.current) rightRef.current.pause();
             };
 
             // Touch and mouse handlers
@@ -453,15 +462,33 @@
         }
 
         // Similarly update the FormCard component
-        function FormCard({ form, onViewVideo }) {
+        function FormCard({ form, onViewVideo }) { // form is now a gloss item with source: 'form_data'
+            const sensesText = Array.isArray(form.senses) ? form.senses.join(', ') : form.senses;
             return (
                 <Card className="result-card clickable-card" onClick={() => onViewVideo(form.id, 'glos')}>
                     <CardContent>
-                        <Typography variant="h6">Form ID: {form.id}</Typography>
-                        <Typography variant="body1">Senses: {form.senses}</Typography>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <Typography variant="h6">ID: {form.id}</Typography>
+                            <span style={{
+                                backgroundColor: '#ff9800',
+                                color: 'white',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontSize: '0.75rem',
+                                fontWeight: 'bold'
+                            }}>
+                                Form Data
+                            </span>
+                        </div>
+                        <Typography variant="body1">Senses: {sensesText}</Typography>
                         {form.signbank && (
                             <Typography variant="body2" color="textSecondary">
                                 Signbank ID: {form.signbank}
+                            </Typography>
+                        )}
+                        {form.thema && (
+                            <Typography variant="body2" color="textSecondary">
+                                Thema: {form.thema}
                             </Typography>
                         )}
                     </CardContent>
@@ -483,22 +510,25 @@
         }
 
         // New component for SignBank Records
-        function SbRecordCard({ record, onViewVideo }) {
-            // Parse senses_dutch if it's JSON
-            let sensesText = "";
-            try {
-                if (record.senses_dutch) {
-                    const senses = JSON.parse(record.senses_dutch);
-                    sensesText = Object.values(senses).join(", ");
-                }
-            } catch (e) {
-                sensesText = record.senses_dutch || "";
-            }
-            
+        function SbRecordCard({ record, onViewVideo }) { // record is mapped from gloss item with source: 'signbank'
+            let sensesText = record.senses_dutch || ""; // senses_dutch is passed in props
+
             return (
                 <Card className="result-card clickable-card" onClick={() => onViewVideo(record.id, 'sb')}>
                     <CardContent>
-                        <Typography variant="h6">SignBank ID: {record.id}</Typography>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <Typography variant="h6">ID: {record.id}</Typography>
+                            <span style={{
+                                backgroundColor: '#9c27b0',
+                                color: 'white',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontSize: '0.75rem',
+                                fontWeight: 'bold'
+                            }}>
+                                SignBank
+                            </span>
+                        </div>
                         <Typography variant="body1">Senses: {sensesText}</Typography>
                     </CardContent>
                     <CardActions>
@@ -518,16 +548,99 @@
             );
         }
 
+        // New component for FormService results
+        function FormServiceCard({ formService, onViewVideo }) {
+            const sensesText = Array.isArray(formService.senses) ? formService.senses.join(', ') : formService.senses;
+            const hasNmmData = formService.nmm_data && formService.nmm_data.length > 0;
+            
+            return (
+                <Card className="result-card clickable-card" onClick={() => onViewVideo(formService.id, 'glos')}>
+                    <CardContent>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <Typography variant="h6">ID: {formService.id}</Typography>
+                            <span style={{
+                                backgroundColor: '#4caf50',
+                                color: 'white',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontSize: '0.75rem',
+                                fontWeight: 'bold'
+                            }}>
+                                FormService
+                            </span>
+                            {hasNmmData && (
+                                <span style={{
+                                    backgroundColor: '#2196f3',
+                                    color: 'white',
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    fontSize: '0.75rem'
+                                }}>
+                                    +NMM
+                                </span>
+                            )}
+                        </div>
+                        <Typography variant="body1">Senses: {sensesText}</Typography>
+                        {formService.signbank && (
+                            <Typography variant="body2" color="textSecondary">
+                                Signbank ID: {formService.signbank}
+                            </Typography>
+                        )}
+                        {formService.thema && (
+                            <Typography variant="body2" color="textSecondary">
+                                Thema: {formService.thema}
+                            </Typography>
+                        )}
+                        {hasNmmData && (
+                            <Typography variant="body2" color="textSecondary">
+                                Related NMM entries: {formService.nmm_data.length}
+                            </Typography>
+                        )}
+                    </CardContent>
+                    <CardActions>
+                        <Button 
+                            size="small" 
+                            color="primary" 
+                            startIcon={<span className="material-icons">videocam</span>}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onViewVideo(formService.id, 'glos');
+                            }}
+                        >
+                            View Video
+                        </Button>
+                    </CardActions>
+                </Card>
+            );
+        }
+
         // Similarly update the NMMCard component
-        function NMMCard({ nmm, onViewVideo }) {
+        function NMMCard({ nmm, onViewVideo }) { // nmm is mapped from gloss item with source: 'nmm_data'
             return (
                 <Card className="result-card clickable-card" onClick={() => onViewVideo(nmm.id, 'nmm')}>
                     <CardContent>
-                        <Typography variant="h6">NMM Data ID: {nmm.id}</Typography>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <Typography variant="h6">ID: {nmm.id}</Typography>
+                            <span style={{
+                                backgroundColor: '#2196f3',
+                                color: 'white',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontSize: '0.75rem',
+                                fontWeight: 'bold'
+                            }}>
+                                NMM Data
+                            </span>
+                        </div>
                         <Typography variant="body1">Signbank ID: {nmm.signbank_id}</Typography>
                         <Typography variant="body1">Glos: {nmm.glos}</Typography>
                         <Typography variant="body2">Type: {nmm.type}</Typography>
                         <Typography variant="body2">Thema: {nmm.thema}</Typography>
+                        {nmm.zelfopname && (
+                            <Typography variant="body2" color="textSecondary">
+                                Zelfopname: {nmm.zelfopname}
+                            </Typography>
+                        )}
                     </CardContent>
                     <CardActions>
                         <Button 
@@ -559,10 +672,125 @@
             );
         }
         
+        // Component for displaying source statistics
+        function SourceStatistics({ glosses }) {
+            if (!glosses || glosses.length === 0) return null;
+            
+            const sourceCounts = glosses.reduce((acc, gloss) => {
+                acc[gloss.source] = (acc[gloss.source] || 0) + 1;
+                return acc;
+            }, {});
+            
+            const sourceColors = {
+                'form_service': '#4caf50',
+                'form_data': '#ff9800',
+                'nmm_data': '#2196f3',
+                'signbank': '#9c27b0'
+            };
+            
+            const sourceLabels = {
+                'form_service': 'FormService',
+                'form_data': 'Form Data',
+                'nmm_data': 'NMM Data',
+                'signbank': 'SignBank'
+            };
+            
+            return (
+                <Paper style={{ padding: '16px', marginBottom: '16px', backgroundColor: '#f5f5f5' }}>
+                    <Typography variant="h6" gutterBottom>
+                        Gloss Sources ({glosses.length} total)
+                    </Typography>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {Object.entries(sourceCounts).map(([source, count]) => (
+                            <span 
+                                key={source}
+                                style={{
+                                    backgroundColor: sourceColors[source] || '#757575',
+                                    color: 'white',
+                                    padding: '4px 12px',
+                                    borderRadius: '16px',
+                                    fontSize: '0.875rem',
+                                    fontWeight: 'bold'
+                                }}
+                            >
+                                {sourceLabels[source] || source}: {count}
+                            </span>
+                        ))}
+                    </div>
+                </Paper>
+            );
+        }
+
+        // Component for displaying debug information
+        function DebugPanel({ debugData }) {
+            if (!debugData) return null;
+            
+            const hasDebugInfo = debugData.form_service_search_count !== undefined ||
+                               (debugData.skipped_nmm_for_formservice_priority && debugData.skipped_nmm_for_formservice_priority.length > 0) ||
+                               (debugData.added_formservice_glos && debugData.added_formservice_glos.length > 0);
+            
+            if (!hasDebugInfo) return null;
+            
+            return (
+                <Accordion style={{ marginBottom: '16px' }}>
+                    <AccordionSummary expandIcon={<span className="material-icons">expand_more</span>}>
+                        <Typography variant="h6" style={{ color: '#1976d2' }}>
+                            Priority System Debug Info
+                        </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                        <div>
+                            {debugData.form_service_search_count !== undefined && (
+                                <Typography variant="body2" gutterBottom>
+                                    <strong>FormService Search Count:</strong> {debugData.form_service_search_count}
+                                </Typography>
+                            )}
+                            
+                            {debugData.skipped_nmm_for_formservice_priority && debugData.skipped_nmm_for_formservice_priority.length > 0 && (
+                                <div style={{ marginTop: '12px' }}>
+                                    <Typography variant="body2" gutterBottom>
+                                        <strong>NMM Entries Skipped (FormService Priority):</strong> {debugData.skipped_nmm_for_formservice_priority.length}
+                                    </Typography>
+                                    <div style={{ marginLeft: '16px', marginTop: '8px' }}>
+                                        {debugData.skipped_nmm_for_formservice_priority.slice(0, 5).map((skip, index) => (
+                                            <Typography key={index} variant="body2" style={{ color: '#ff9800', fontSize: '0.8rem' }}>
+                                                • NMM ID {skip.nmm_id}: "{skip.glos_value}"
+                                            </Typography>
+                                        ))}
+                                        {debugData.skipped_nmm_for_formservice_priority.length > 5 && (
+                                            <Typography variant="body2" style={{ color: '#757575', fontSize: '0.8rem' }}>
+                                                ... and {debugData.skipped_nmm_for_formservice_priority.length - 5} more
+                                            </Typography>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {debugData.added_formservice_glos && debugData.added_formservice_glos.length > 0 && (
+                                <div style={{ marginTop: '12px' }}>
+                                    <Typography variant="body2" gutterBottom>
+                                        <strong>FormService Glos Added:</strong> {debugData.added_formservice_glos.length}
+                                    </Typography>
+                                    <Typography variant="body2" style={{ color: '#4caf50', fontSize: '0.8rem' }}>
+                                        {debugData.added_formservice_glos.slice(0, 10).join(', ')}
+                                        {debugData.added_formservice_glos.length > 10 && '...'}
+                                    </Typography>
+                                </div>
+                            )}
+                        </div>
+                    </AccordionDetails>
+                </Accordion>
+            );
+        }
+
         // Create a new component for suggestions dropdown
         function SuggestionsDropdown({ suggestions, anchorEl, open, onClose, onSelectSuggestion }) {
-            if (!suggestions || (!suggestions.words.length && !suggestions.lemmas.length && 
-                               (!suggestions.synonyms || !suggestions.synonyms.length))) {
+            // Robust check for suggestions content
+            const hasWords = suggestions && suggestions.words && suggestions.words.length > 0;
+            const hasLemmas = suggestions && suggestions.lemmas && suggestions.lemmas.length > 0;
+            const hasSynonyms = suggestions && suggestions.synonyms && suggestions.synonyms.length > 0;
+
+            if (!open || (!hasWords && !hasLemmas && !hasSynonyms)) {
                 return null;
             }
             
@@ -573,7 +801,7 @@
                             <Paper elevation={3}>
                                 <ClickAwayListener onClickAway={onClose}>
                                     <div>
-                                        {suggestions.words.length > 0 && (
+                                        {hasWords && (
                                             <List subheader={<ListSubheader>Words</ListSubheader>} dense>
                                                 {suggestions.words.map((suggestion, index) => (
                                                     <ListItem 
@@ -587,7 +815,7 @@
                                             </List>
                                         )}
                                         
-                                        {suggestions.lemmas.length > 0 && (
+                                        {hasLemmas && (
                                             <List subheader={<ListSubheader>Lemmas</ListSubheader>} dense>
                                                 {suggestions.lemmas.map((suggestion, index) => (
                                                     <ListItem 
@@ -601,7 +829,7 @@
                                             </List>
                                         )}
                                         
-                                        {suggestions.synonyms && suggestions.synonyms.length > 0 && (
+                                        {hasSynonyms && (
                                             <List subheader={<ListSubheader>Synonyms</ListSubheader>} dense>
                                                 {suggestions.synonyms.map((suggestion, index) => (
                                                     <ListItem 
@@ -634,7 +862,8 @@
             const [tabValue, setTabValue] = useState(0);
             const [snackbarOpen, setSnackbarOpen] = useState(false);
             const [offset, setOffset] = useState(0);
-            const [suggestions, setSuggestions] = useState({ words: [], lemmas: [] });
+            // Initialize suggestions state with all potential keys
+            const [suggestions, setSuggestions] = useState({ words: [], lemmas: [], synonyms: [] });
             const [suggestionsOpen, setSuggestionsOpen] = useState(false);
             const searchInputRef = useRef(null);
             // New state for video modal
@@ -681,7 +910,7 @@
             // Function to fetch suggestions
             const fetchSuggestions = useCallback(async (query) => {
                 if (!query || query.length < MIN_SUGGESTION_LENGTH) {
-                    setSuggestions({ words: [], lemmas: [] });
+                    setSuggestions({ words: [], lemmas: [], synonyms: [] });
                     setSuggestionsOpen(false);
                     return;
                 }
@@ -699,19 +928,25 @@
                     
                     const data = await response.json();
                     if (data.success && data.data.suggestions) {
-                        setSuggestions(data.data.suggestions);
+                        // Ensure all keys are present, defaulting to empty arrays if missing from API
+                        const newSuggestions = {
+                            words: data.data.suggestions.words || [],
+                            lemmas: data.data.suggestions.lemmas || [],
+                            synonyms: data.data.suggestions.synonyms || []
+                        };
+                        setSuggestions(newSuggestions);
                         setSuggestionsOpen(
-                            data.data.suggestions.words.length > 0 || 
-                            data.data.suggestions.lemmas.length > 0 || 
-                            (data.data.suggestions.synonyms && data.data.suggestions.synonyms.length > 0)
+                            (newSuggestions.words && newSuggestions.words.length > 0) ||
+                            (newSuggestions.lemmas && newSuggestions.lemmas.length > 0) ||
+                            (newSuggestions.synonyms && newSuggestions.synonyms.length > 0)
                         );
                     } else {
-                        setSuggestions({ words: [], lemmas: [] });
+                        setSuggestions({ words: [], lemmas: [], synonyms: [] });
                         setSuggestionsOpen(false);
                     }
                 } catch (err) {
                     console.error("Error fetching suggestions:", err);
-                    setSuggestions({ words: [], lemmas: [] });
+                    setSuggestions({ words: [], lemmas: [], synonyms: [] });
                     setSuggestionsOpen(false);
                 }
             }, []);
@@ -721,7 +956,7 @@
                 if (searchQuery && searchQuery.length >= MIN_SUGGESTION_LENGTH) {
                     fetchSuggestions(searchQuery);
                 } else {
-                    setSuggestions({ words: [], lemmas: [] });
+                    setSuggestions({ words: [], lemmas: [], synonyms: [] });
                     setSuggestionsOpen(false);
                 }
             }, [searchQuery, fetchSuggestions]);
@@ -769,7 +1004,7 @@
                     if (data.success && 
                         ((data.data.words && data.data.words.length > 0) || 
                          (data.data.sentences && data.data.sentences.length > 0) || 
-                         (data.data.forms && data.data.forms.length > 0))) {
+                         (data.data.glosses && data.data.glosses.length > 0))) { // Changed forms to glosses
                         setTabValue(0);
                     }
                 } catch (err) {
@@ -908,105 +1143,82 @@
                                     variant="fullWidth"
                                 >
                                     <Tab label="Sentences" />
-                                    <Tab label="Forms & SignBank" />
+                                    <Tab label="Glosses" /> {/* Changed from Forms */}
+                                    <Tab label="Words" />
+                                    {/* Conditionally render Synonyms tab */}
+                                    {results.data && results.data.synonyms && results.data.synonyms.length > 0 && (
+                                        <Tab label="Synonyms" />
+                                    )}
                                     <Tab label="Raw JSON" />
                                 </Tabs>
                                 
                                 <TabPanel value={tabValue} index={0}>
-                                    {results.data.sentences && results.data.sentences.length > 0 ? (
-                                        results.data.sentences.map((sentence, index) => (
-                                            <SentenceCard 
-                                                key={`sentence-${sentence.ID}-${offset}-${index}`} 
-                                                sentence={sentence} 
-                                                onViewVideo={handleViewVideo} 
-                                            />
-                                        ))
-                                    ) : (
-                                        <Typography variant="body1">
-                                            No sentences found for "{searchQuery}".
-                                        </Typography>
-                                    )}
-                                    <Grid container spacing={2} justifyContent="space-between" style={{ marginTop: '10px' }}>
-                                        <Grid item>
-                                            <Button variant="contained" onClick={handlePrevPage} disabled={offset === 0}>
-                                                Previous Page
-                                            </Button>
-                                        </Grid>
-                                        <Grid item>
-                                            <Button variant="contained" onClick={handleNextPage}>
-                                                Next Page
-                                            </Button>
-                                        </Grid>
-                                    </Grid>
+                                    {results.data && results.data.sentences && results.data.sentences.length > 0 ? (
+                                        results.data.sentences.map(sentence => 
+                                            <SentenceCard key={sentence.ID || sentence.id} sentence={sentence} onViewVideo={handleViewVideo} />
+                                        )
+                                    ) : <Typography>No sentences found.</Typography>}
                                 </TabPanel>
-                                
-                                <TabPanel value={tabValue} index={1}>
-                                    {/* Glosses section - combining Forms and SignBank Records */}
-                                    {results.data.glosses && results.data.glosses.length > 0 ? (
-                                        <>
-                                            <Typography variant="h6" gutterBottom>Glosses</Typography>
-                                            {results.data.glosses.map((gloss, index) => {
-                                                if (gloss.source === 'form_data') {
-                                                    return (
-                                                        <FormCard 
-                                                            key={`form-${gloss.id}-${offset}-${index}`} 
-                                                            form={gloss} 
-                                                            onViewVideo={handleViewVideo} 
-                                                        />
-                                                    );
-                                                } else if (gloss.source === 'sb_records') {
-                                                    return (
-                                                        <SbRecordCard 
-                                                            key={`sb-${gloss.id}-${offset}-${index}`} 
-                                                            record={gloss} 
-                                                            onViewVideo={handleViewVideo} 
-                                                        />
-                                                    );
-                                                }
-                                                return null; // In case we get an unknown source
-                                            })}
-                                        </>
-                                    ) : (
-                                        <Typography variant="body1">
-                                            No glosses found for "{searchQuery}".
-                                        </Typography>
-                                    )}
-                                    
-                                    {/* Synonyms section */}
-                                    {results.data.synonyms && results.data.synonyms.length > 0 ? (
-                                        <>
-                                            <Typography variant="h6" gutterBottom style={{marginTop: '20px'}}>
-                                                Synonyms
-                                            </Typography>
-                                            {results.data.synonyms.map((synonym, index) => (
-                                                <SynonymCard 
-                                                    key={`synonym-${synonym.id}-${offset}-${index}`} 
-                                                    synonym={synonym} 
-                                                />
-                                            ))}
-                                        </>
-                                    ) : null}
-                                    {/* NMM data will be shown in the modal when viewing a form with associated NMM data */}
-                                    
-                                    <Grid container spacing={2} justifyContent="space-between" style={{ marginTop: '10px' }}>
-                                        <Grid item>
-                                            <Button variant="contained" onClick={handlePrevPage} disabled={offset === 0}>
-                                                Previous Page
-                                            </Button>
-                                        </Grid>
-                                        <Grid item>
-                                            <Button variant="contained" onClick={handleNextPage}>
-                                                Next Page
-                                            </Button>
-                                        </Grid>
-                                    </Grid>
+                                <TabPanel value={tabValue} index={1}> {/* Was Forms, now Glosses */}
+                                    {results.data && results.data.glosses && results.data.glosses.length > 0 ? (
+                                        <div>
+                                            <SourceStatistics glosses={results.data.glosses} />
+                                            <DebugPanel debugData={results.debug} />
+                                            {results.data.glosses.map(gloss => {
+                                            // Use a unique key, combining source and id
+                                            const key = `${gloss.source}-${gloss.id}`;
+                                            if (gloss.source === 'form_service') {
+                                                return <FormServiceCard key={key} formService={gloss} onViewVideo={handleViewVideo} />;
+                                            } else if (gloss.source === 'form_data') {
+                                                return <FormCard key={key} form={gloss} onViewVideo={handleViewVideo} />;
+                                            } else if (gloss.source === 'nmm_data') {
+                                                // Map gloss fields to props expected by NMMCard or adapt NMMCard
+                                                const nmmCardProps = {
+                                                    id: gloss.id,
+                                                    signbank_id: gloss.signbank, 
+                                                    glos: gloss.senses && gloss.senses.length > 0 ? gloss.senses[0] : '',
+                                                    type: gloss.nmm_type, 
+                                                    thema: gloss.thema,
+                                                    zelfopname: gloss.zelfopname,
+                                                    source: gloss.source // Pass source for display
+                                                };
+                                                return <NMMCard key={key} nmm={nmmCardProps} onViewVideo={() => handleViewVideo(gloss.id, 'nmm')} />;
+                                            } else if (gloss.source === 'signbank') {
+                                                 // Map gloss fields to props expected by SbRecordCard or adapt SbRecordCard
+                                                const sbCardProps = {
+                                                    id: gloss.id,
+                                                    // Assuming 'senses_dutch' is the primary display string for SB records in merged glosses
+                                                    // This might be gloss.senses[0] or another field depending on SearchService mergeGlosses
+                                                    senses_dutch: gloss.senses && gloss.senses.length > 0 ? gloss.senses[0] : (gloss.annotation_id_gloss_dutch || ''),
+                                                    source: gloss.source // Pass source for display
+                                                };
+                                                return <SbRecordCard key={key} record={sbCardProps} onViewVideo={() => handleViewVideo(gloss.id, 'sb')} />;
+                                            }
+                                            return <Typography key={key}>Unknown gloss source: {gloss.source}</Typography>;
+                                        })}
+                                        </div>
+                                    ) : <Typography>No glosses found.</Typography>}
                                 </TabPanel>
-                                
                                 <TabPanel value={tabValue} index={2}>
-                                    <Typography variant="h6" gutterBottom>
-                                        Raw JSON Response
-                                    </Typography>
-                                    <JSONViewer data={results} />
+                                    {results.data && results.data.words && results.data.words.length > 0 ? (
+                                        results.data.words.map(word => 
+                                            <WordCard key={word.id || word.word} word={word} />
+                                        )
+                                    ) : <Typography>No words found.</Typography>}
+                                </TabPanel>
+                                
+                                {/* Conditional Synonyms Tab - index 3 if present */}
+                                {results.data && results.data.synonyms && results.data.synonyms.length > 0 && (
+                                    <TabPanel value={tabValue} index={3}>
+                                        {results.data.synonyms.map(synonym => 
+                                            <SynonymCard key={synonym.id} synonym={synonym} />
+                                        )}
+                                    </TabPanel>
+                                )}
+
+                                {/* Raw JSON Tab - index depends on whether Synonyms tab is present */}
+                                <TabPanel value={tabValue} index={results.data && results.data.synonyms && results.data.synonyms.length > 0 ? 4 : 3}>
+                                    {results ? <JSONViewer data={results} /> : <Typography>No results to display.</Typography>}
                                 </TabPanel>
                             </Paper>
                         )}
