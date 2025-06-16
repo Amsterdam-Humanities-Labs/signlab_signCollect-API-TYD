@@ -177,6 +177,23 @@ class NmmService
                 $nmmId = $nmmRow['id']; // This is the ID from nmm_data
                 $nmmRecord = $nmmRow;
                 
+                // Check if this nmm record has app_ready = 1 in matched_transcriptions
+                $hasAppReady = false;
+                $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'nmm' AND app_ready = 1 AND added = '1' LIMIT 1");
+                if ($checkStmt) {
+                    $checkStmt->bind_param("i", $nmmId);
+                    if ($checkStmt->execute()) {
+                        $checkResult = $checkStmt->get_result();
+                        $hasAppReady = $checkResult->num_rows > 0;
+                    }
+                    $checkStmt->close();
+                }
+                
+                // Skip this nmm if no app_ready videos
+                if (!$hasAppReady) {
+                    continue;
+                }
+                
                 // Fetch videos from 'nmm' source
                 $videosNMM = $this->_fetchLastVideoSet((string)$nmmId, "zOg LIKE '%nmm%'");
                 $this->response['debug']['videos_nmm_source_search_nmmid_' . $nmmId] = $videosNMM;
@@ -224,7 +241,7 @@ class NmmService
         }
 
         $sql = "SELECT l_file, m_file, r_file FROM matched_transcriptions 
-                WHERE m_transcription = ? AND " . $zOgCondition;
+                WHERE m_transcription = ? AND " . $zOgCondition . " AND app_ready = 1 AND added = '1'";
 
         $stmt = $this->conn->prepare($sql);
         if ($stmt) {

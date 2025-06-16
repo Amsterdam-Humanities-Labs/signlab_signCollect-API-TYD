@@ -65,6 +65,23 @@ class FormService
                 $formId = $formRow['id'];
                 $formRecord = $formRow;
                 
+                // Check if this form has app_ready = 1 in matched_transcriptions
+                $hasAppReady = false;
+                $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg IN ('glos', 'extern', 'labels') AND app_ready = 1 AND added = '1' LIMIT 1");
+                if ($checkStmt) {
+                    $checkStmt->bind_param("i", $formId);
+                    if ($checkStmt->execute()) {
+                        $checkResult = $checkStmt->get_result();
+                        $hasAppReady = $checkResult->num_rows > 0;
+                    }
+                    $checkStmt->close();
+                }
+                
+                // Skip this form if no app_ready videos
+                if (!$hasAppReady) {
+                    continue;
+                }
+                
                 // Fetch videos from 'extern' source (for FormService)
                 $videosExtern = $this->_fetchLastVideoSet((string)$formId, "zOg = 'extern'");
                 $this->response['debug']['videos_extern_source_formid_' . $formId] = $videosExtern;
@@ -168,7 +185,7 @@ class FormService
         }
 
         $sql = "SELECT l_file, m_file, r_file FROM matched_transcriptions 
-                WHERE m_transcription = ? AND " . $zOgCondition;
+                WHERE m_transcription = ? AND " . $zOgCondition . " AND app_ready = 1 AND added = '1'";
 
         $stmt = $this->conn->prepare($sql);
         if ($stmt) {

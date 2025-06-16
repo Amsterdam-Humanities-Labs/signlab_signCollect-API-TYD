@@ -17,7 +17,7 @@ SecurityHeaders::setHeaders();
 ErrorReporting::configure();
 
 // Include the MySQL configuration file
-include '../../mysql_config_test.php';
+include '../../mysql_config.php';
 
 // Start timer
 $startTime = microtime(true);

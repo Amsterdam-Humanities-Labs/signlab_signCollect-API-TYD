@@ -1,0 +1,545 @@
+{
+    "timestamp": "2025-06-16 12:00:35",
+    "configuration": {
+        "api_base_url": "https:\/\/api.signcollect.nl",
+        "test_limit": 100,
+        "timeout_seconds": 10
+    },
+    "statistics": {
+        "total_glosses": 13320,
+        "searches_attempted": 100,
+        "searches_successful": 16,
+        "searches_failed": 0,
+        "searches_empty": 84,
+        "videos_tested": 24,
+        "videos_working": 24,
+        "videos_failed": 0,
+        "total_response_time": 44.320677042007446
+    },
+    "working_examples": [
+        {
+            "glos": "1",
+            "source": "form_data",
+            "results": 7,
+            "response_time": 3.969372034072876
+        },
+        {
+            "glos": "10-A",
+            "source": "form_data",
+            "results": 1,
+            "response_time": 0.26184988021850586
+        },
+        {
+            "glos": "10-B",
+            "source": "form_data",
+            "results": 1,
+            "response_time": 0.277972936630249
+        },
+        {
+            "glos": "11-A",
+            "source": "form_data",
+            "results": 1,
+            "response_time": 0.19320201873779297
+        },
+        {
+            "glos": "11-B",
+            "source": "form_data",
+            "results": 1,
+            "response_time": 0.2337939739227295
+        }
+    ],
+    "failed_searches": [],
+    "failed_videos": [],
+    "detailed_results": [
+        {
+            "glos": "1",
+            "source": "form_data",
+            "sentences_count": 1,
+            "glosses_count": 6,
+            "response_time": 3.969372034072876,
+            "sentences": [
+                {
+                    "id": 2342,
+                    "zinstring": "1, 2, 3, hup!",
+                    "thema": "Baby",
+                    "type": "zin"
+                }
+            ],
+            "glosses": [
+                {
+                    "id": 52117,
+                    "senses": [
+                        "10"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0027.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9049.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2655.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                },
+                {
+                    "id": 52118,
+                    "senses": [
+                        "11"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0029.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9051.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2657.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                },
+                {
+                    "id": 52119,
+                    "senses": [
+                        "12"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0034.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9056.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2662.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                },
+                {
+                    "id": 52120,
+                    "senses": [
+                        "13"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0036.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9058.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2664.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                },
+                {
+                    "id": 52121,
+                    "senses": [
+                        "14"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0038.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9060.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2666.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                },
+                {
+                    "id": 52122,
+                    "senses": [
+                        "15"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0040.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9062.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2668.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                }
+            ]
+        },
+        {
+            "glos": "10-A",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.26184988021850586,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 52117,
+                    "senses": [
+                        "10"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0027.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9049.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2655.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                }
+            ]
+        },
+        {
+            "glos": "10-B",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.277972936630249,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 56388,
+                    "senses": [
+                        "10"
+                    ],
+                    "signbank": "",
+                    "thema": "Getal en vormen",
+                    "type": "glos",
+                    "source": "form_data",
+                    "mocap": false
+                }
+            ]
+        },
+        {
+            "glos": "11-A",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.19320201873779297,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 52118,
+                    "senses": [
+                        "11"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0029.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9051.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2657.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                }
+            ]
+        },
+        {
+            "glos": "11-B",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.2337939739227295,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 56379,
+                    "senses": [
+                        "11"
+                    ],
+                    "signbank": "",
+                    "thema": "Getal en vormen",
+                    "type": "glos",
+                    "source": "form_data",
+                    "mocap": false
+                }
+            ]
+        },
+        {
+            "glos": "12-A",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.2870190143585205,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 52119,
+                    "senses": [
+                        "12"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0034.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9056.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2662.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                }
+            ]
+        },
+        {
+            "glos": "12-B",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.24389195442199707,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 56380,
+                    "senses": [
+                        "12"
+                    ],
+                    "signbank": "",
+                    "thema": "Getal en vormen",
+                    "type": "glos",
+                    "source": "form_data",
+                    "mocap": false
+                }
+            ]
+        },
+        {
+            "glos": "13-A",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.20725488662719727,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 52120,
+                    "senses": [
+                        "13"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0036.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9058.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2664.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                }
+            ]
+        },
+        {
+            "glos": "13-B",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.234421968460083,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 56381,
+                    "senses": [
+                        "13"
+                    ],
+                    "signbank": "",
+                    "thema": "Getal en vormen",
+                    "type": "glos",
+                    "source": "form_data",
+                    "mocap": false
+                }
+            ]
+        },
+        {
+            "glos": "14-A",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.19100403785705566,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 52121,
+                    "senses": [
+                        "14"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0038.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9060.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2666.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                }
+            ]
+        },
+        {
+            "glos": "14-B",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.28615498542785645,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 56382,
+                    "senses": [
+                        "14"
+                    ],
+                    "signbank": "",
+                    "thema": "Getal en vormen",
+                    "type": "glos",
+                    "source": "form_data",
+                    "mocap": false
+                }
+            ]
+        },
+        {
+            "glos": "15-A",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.29163098335266113,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 52122,
+                    "senses": [
+                        "15"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0040.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9062.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2668.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                }
+            ]
+        },
+        {
+            "glos": "15-B",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.38517117500305176,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 56383,
+                    "senses": [
+                        "15"
+                    ],
+                    "signbank": "",
+                    "thema": "Getal en vormen",
+                    "type": "glos",
+                    "source": "form_data",
+                    "mocap": false
+                }
+            ]
+        },
+        {
+            "glos": "2",
+            "source": "form_data",
+            "sentences_count": 2,
+            "glosses_count": 0,
+            "response_time": 1.923975944519043,
+            "sentences": [
+                {
+                    "id": 1255,
+                    "zinstring": "Binnenkort ga je naar groep 2.",
+                    "thema": "School",
+                    "type": "zin"
+                },
+                {
+                    "id": 2342,
+                    "zinstring": "1, 2, 3, hup!",
+                    "thema": "Baby",
+                    "type": "zin"
+                }
+            ],
+            "glosses": []
+        },
+        {
+            "glos": "3",
+            "source": "form_data",
+            "sentences_count": 1,
+            "glosses_count": 1,
+            "response_time": 1.8495399951934814,
+            "sentences": [
+                {
+                    "id": 2342,
+                    "zinstring": "1, 2, 3, hup!",
+                    "thema": "Baby",
+                    "type": "zin"
+                }
+            ],
+            "glosses": [
+                {
+                    "id": 52133,
+                    "senses": [
+                        "3, drie"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0042.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9064.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2670.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                }
+            ]
+        },
+        {
+            "glos": "4-A",
+            "source": "form_data",
+            "sentences_count": 0,
+            "glosses_count": 1,
+            "response_time": 0.27797698974609375,
+            "sentences": [],
+            "glosses": [
+                {
+                    "id": 52134,
+                    "senses": [
+                        "4"
+                    ],
+                    "signbank": "",
+                    "thema": "GETAL EN VORMEN",
+                    "type": "glos",
+                    "source": "form_service",
+                    "videos": {
+                        "videoLeft": "https:\/\/media.signcollect.nl\/L20250605_0043.mp4",
+                        "videoCenter": "https:\/\/media.signcollect.nl\/M20250605_9065.mp4",
+                        "videoRight": "https:\/\/media.signcollect.nl\/R20250605_2671.mp4"
+                    },
+                    "mocap": false,
+                    "nmm_data": []
+                }
+            ]
+        }
+    ]
+}

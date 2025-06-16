@@ -104,7 +104,11 @@ class VideoService
                 }
             } 
             else if ($zOgValue === 'glos') {
-                $sql = "SELECT l_file, m_file, r_file FROM matched_transcriptions WHERE m_transcription = ? AND (zOg LIKE 'glos' OR zOg LIKE 'extern' OR zOg LIKE '%nmm%')";
+                // Check if app_ready column exists
+                $hasAppReady = $this->checkAppReadyColumn();
+                $appReadyFilter = $hasAppReady ? " AND app_ready = 1" : "";
+                
+                $sql = "SELECT l_file, m_file, r_file FROM matched_transcriptions WHERE m_transcription = ? AND (zOg LIKE 'glos' OR zOg LIKE 'extern' OR zOg LIKE 'labels' OR zOg LIKE '%nmm%') AND added = '1'" . $appReadyFilter;
                 $stmt = $this->conn->prepare($sql);
                 if (!$stmt) {
                     $this->response['debug']['video_prepare_error'] = $this->conn->error;
@@ -118,7 +122,11 @@ class VideoService
                 }
                 $stmt->bind_param("i", $entityId);
             } else {
-                $sql = "SELECT l_file, m_file, r_file FROM matched_transcriptions WHERE m_transcription = ? AND zOg = ?";
+                // Check if app_ready column exists
+                $hasAppReady = $this->checkAppReadyColumn();
+                $appReadyFilter = $hasAppReady ? " AND app_ready = 1" : "";
+                
+                $sql = "SELECT l_file, m_file, r_file FROM matched_transcriptions WHERE m_transcription = ? AND zOg = ? AND added = '1'" . $appReadyFilter;
                 $stmt = $this->conn->prepare($sql);
                 if (!$stmt) {
                     $this->response['debug']['video_prepare_error'] = $this->conn->error;
@@ -188,6 +196,27 @@ class VideoService
         }
         
         return $videos;
+    }
+    
+    /**
+     * Check if app_ready column exists in matched_transcriptions table
+     * 
+     * @return bool True if column exists
+     */
+    private function checkAppReadyColumn()
+    {
+        static $hasAppReady = null;
+        
+        if ($hasAppReady === null) {
+            try {
+                $result = $this->conn->query("SHOW COLUMNS FROM matched_transcriptions LIKE 'app_ready'");
+                $hasAppReady = ($result && $result->num_rows > 0);
+            } catch (Exception $e) {
+                $hasAppReady = false;
+            }
+        }
+        
+        return $hasAppReady;
     }
     
     /**

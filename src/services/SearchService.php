@@ -104,6 +104,7 @@ class SearchService
         $glosses = [];
         $processedGlosses = []; // Track processed glosses (primary display string) to avoid duplicates
         $formServiceGlosValues = []; // Track glos values from FormService for priority system
+        $formServiceIds = []; // Track IDs from FormService to avoid duplicates
 
         // Helper function to check for forbidden pattern (e.g., "-B" through "-Z")
         $checkForbiddenPattern = function($text) {
@@ -129,6 +130,7 @@ class SearchService
             if (!empty($glosDisplayFormService) && !in_array($glosDisplayFormService, $processedGlosses)) {
                 $processedGlosses[] = $glosDisplayFormService;
                 $formServiceGlosValues[] = $glosDisplayFormService; // Track for priority
+                $formServiceIds[] = $formServiceItem['id']; // Track ID for deduplication
 
                 // Process senses array from FormService
                 $sensesArray = [];
@@ -160,6 +162,15 @@ class SearchService
         // Process form_data entries
         foreach ($forms as $form) {
             $formShouldBeSkipped = false;
+            
+            // PRIORITY SYSTEM: Skip if FormService already has this ID
+            if (isset($form['id']) && in_array($form['id'], $formServiceIds)) {
+                $this->response['debug']['skipped_form_for_formservice_id_priority'][] = [
+                    'form_id' => $form['id'],
+                    'reason' => 'FormService has same ID with priority'
+                ];
+                continue; // Skip this form_data entry as FormService has priority
+            }
 
             // Check 'glos' field from form_data (actual column value)
             $formGlosField = $form['glos'] ?? null; 
@@ -264,7 +275,7 @@ class SearchService
                     "senses" => $processedNmmGlosValue ? [$processedNmmGlosValue] : [], // Use processed NMM 'glos' field as the primary sense in an array
                     "signbank" => $nmmItem['signbank_id'] ?? null,
                     "thema" => $nmmItem['thema'] ?? "Unknown", 
-                    "type" => "glos", // Standardize type for the merged list
+                    "type" => "nmm", // Use nmm type for nmm_data source
                     "source" => "nmm_data",
                     "videos" => $nmmItem['videos'] ?? ['videoLeft' => null, 'videoCenter' => null, 'videoRight' => null],
                     "mocap" => false, // NMM data does not have mocap information
@@ -534,9 +545,9 @@ class SearchService
                     $exists = in_array($sentence['ID'], array_column($sentenceMatches, 'id')); // Changed 'ID' to 'id' for the check key
                     
                     if (!$exists) {
-                        // First check if there's at least one row in matched_transcriptions with matching criteria
+                        // First check if there's at least one row in matched_transcriptions with matching criteria and app_ready = 1
                         $hasMatchedTranscription = false;
-                        $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'zin' AND added = '1' LIMIT 1");
+                        $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'zin' AND added = '1' AND app_ready = 1 LIMIT 1");
                         if ($checkStmt) {
                             $checkStmt->bind_param("i", $sentence['ID']);
                             if ($checkStmt->execute()) {
@@ -627,16 +638,21 @@ class SearchService
                 $exists = in_array($form['id'], array_column($formMatches, 'id'));
 
                 if (!$exists) {
-                    // Check if there are any videos associated with this form
-                    $hasVideos = true; // Assume true, or implement video check if needed
-
-                    if ($this->videoService !== null) {
-                        $videos = $this->videoService->getVideosForEntity($form['id'], 'glos');
-                        $hasVideos = !empty($videos['videoLeft']) || !empty($videos['videoCenter']) || !empty($videos['videoRight']);
-                        $this->response['debug']['form_' . $form['id'] . '_has_videos'] = $hasVideos;
+                    // Check if there are any videos associated with this form and app_ready = 1
+                    $hasAppReadyVideos = false;
+                    
+                    // Check matched_transcriptions for app_ready status
+                    $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg IN ('glos', 'extern', 'labels') AND app_ready = 1 AND added = '1' LIMIT 1");
+                    if ($checkStmt) {
+                        $checkStmt->bind_param("i", $form['id']);
+                        if ($checkStmt->execute()) {
+                            $checkResult = $checkStmt->get_result();
+                            $hasAppReadyVideos = $checkResult->num_rows > 0;
+                        }
+                        $checkStmt->close();
                     }
 
-                    if ($hasVideos) {
+                    if ($hasAppReadyVideos) {
                         // Senses processing (already handles JSON string to array)
                         $sensesArray = [];
                         if (!empty($form['senses'])) { // Senses might be JSON string or already array from CAST
