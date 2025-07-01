@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Review Admin - SignCollect</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#1F2937',
+                        success: '#10B981',
+                        warning: '#F59E0B',
+                        danger: '#EF4444'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .video-thumbnail {
+            aspect-ratio: 1/1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .status-ready { @apply bg-success text-white; }
+        .status-not-ready { @apply bg-warning text-white; }
+        .filter-active { @apply bg-primary text-white; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-gray-900">Video Review Admin</h1>
+                <div class="flex items-center space-x-4">
+                    <div class="text-sm text-gray-600">
+                        Total: <span id="total-count" class="font-semibold">0</span>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        Ready: <span id="ready-count" class="font-semibold text-success">0</span>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        Not Ready: <span id="not-ready-count" class="font-semibold text-warning">0</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span id="username-display" class="text-sm text-gray-600"></span>
+                        <button id="logout-btn" class="text-sm bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded">
+                            Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 class="text-xl font-bold text-gray-900 mb-4">Admin Login</h2>
+            <form id="login-form">
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-2">Username</label>
+                    <input type="text" id="username" name="username" required 
+                           class="w-full border border-gray-300 rounded-md px-3 py-2">
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                    <input type="password" id="password" name="password" required 
+                           class="w-full border border-gray-300 rounded-md px-3 py-2">
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-md">
+                        Login
+                    </button>
+                </div>
+            </form>
+            <div id="login-error" class="hidden mt-4 text-red-600 text-sm"></div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-content" class="hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex flex-col lg:flex-row gap-6">
+            <!-- Filters Sidebar -->
+            <div class="lg:w-64 bg-white rounded-lg shadow-sm p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Filters</h2>
+                
+                <!-- Status Filter -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Publication Status</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center">
+                            <input type="radio" name="status" value="all" checked class="mr-2">
+                            <span class="text-sm">All Videos</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="radio" name="status" value="1" class="mr-2">
+                            <span class="text-sm">Ready for App</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="radio" name="status" value="0" class="mr-2">
+                            <span class="text-sm">Not Ready</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Theme Filter -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Theme</label>
+                    <select id="theme-filter" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                        <option value="">All Themes</option>
+                    </select>
+                </div>
+
+                <!-- Search -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Search Glos</label>
+                    <input type="text" id="search-input" placeholder="Search by glos name..." 
+                           class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                </div>
+
+                <!-- Bulk Actions -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Bulk Actions</label>
+                    <div class="space-y-2">
+                        <button id="select-all" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md text-sm">
+                            Select All Visible
+                        </button>
+                        <button id="bulk-ready" class="w-full bg-success hover:bg-green-600 text-white px-3 py-2 rounded-md text-sm">
+                            Mark Selected Ready
+                        </button>
+                        <button id="bulk-not-ready" class="w-full bg-warning hover:bg-yellow-600 text-white px-3 py-2 rounded-md text-sm">
+                            Mark Selected Not Ready
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Clear Filters -->
+                <button id="clear-filters" class="w-full bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-md text-sm">
+                    Clear All Filters
+                </button>
+            </div>
+
+            <!-- Main Content -->
+            <div class="flex-1">
+                <!-- Loading Indicator -->
+                <div id="loading" class="hidden flex justify-center items-center py-8">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    <span class="ml-2 text-gray-600">Loading videos...</span>
+                </div>
+
+                <!-- Video Grid -->
+                <div id="video-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <!-- Videos will be loaded here -->
+                </div>
+
+                <!-- Load More Indicator -->
+                <div id="load-more" class="flex justify-center items-center py-8 hidden">
+                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                    <span class="ml-2 text-gray-600">Loading more videos...</span>
+                </div>
+
+                <!-- No Results -->
+                <div id="no-results" class="hidden text-center py-8">
+                    <div class="text-gray-400 text-lg mb-2">No videos found</div>
+                    <div class="text-gray-500 text-sm">Try adjusting your filters</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Card Template -->
+    <template id="video-card-template">
+        <div class="bg-white rounded-lg shadow-sm border video-card" data-id="">
+            <div class="relative">
+                <!-- Thumbnail -->
+                <div class="video-thumbnail rounded-t-lg relative overflow-hidden">
+                    <video class="w-full h-full object-cover" preload="none" muted>
+                        <source src="" type="video/mp4">
+                    </video>
+                </div>
+                
+                <!-- Selection Checkbox -->
+                <div class="absolute top-2 left-2">
+                    <input type="checkbox" class="video-select rounded border-gray-300" data-id="">
+                </div>
+                
+                <!-- Status Badge -->
+                <div class="absolute top-2 right-2">
+                    <span class="status-badge px-2 py-1 text-xs font-medium rounded-full"></span>
+                </div>
+            </div>
+            
+            <div class="p-4">
+                <!-- Glos Name -->
+                <h3 class="font-semibold text-gray-900 mb-2 glos-name"></h3>
+                
+                <!-- Senses -->
+                <div class="senses mb-3">
+                    <!-- Senses will be added here -->
+                </div>
+                
+                <!-- Theme -->
+                <div class="text-sm text-gray-500 mb-3 theme"></div>
+                
+                <!-- Action Buttons -->
+                <div class="flex space-x-2">
+                    <button class="toggle-ready flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors">
+                        <!-- Status text will be set by JS -->
+                    </button>
+                    <button class="view-videos bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 text-sm rounded-md">
+                        View All
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Video Modal -->
+    <div id="video-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg max-w-4xl w-full max-h-screen overflow-y-auto">
+                <div class="p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 id="modal-title" class="text-lg font-semibold"></h3>
+                        <button id="close-modal" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="modal-videos">
+                        <!-- Videos will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div> <!-- End main-content -->
+
+    <script src="js/app.js"></script>
+</body>
+</html>
