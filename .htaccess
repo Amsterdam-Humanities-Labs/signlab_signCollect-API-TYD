@@ -9,6 +9,7 @@ RewriteCond %{REQUEST_URI} !/index\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/getVideos\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/getThemas\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/getThemeVideos\.php$ [NC]
+RewriteCond %{REQUEST_URI} !/getRandomVideo\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/submit\.php$ [NC] # If submit.php needs to be directly accessible
 RewriteRule ^(.*)\.php$ /$1 [R=301,L]
 
