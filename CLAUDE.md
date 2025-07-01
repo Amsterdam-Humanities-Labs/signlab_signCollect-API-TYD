@@ -18,6 +18,7 @@ The API uses a service-oriented architecture with specialized services in `src/s
 - **MocapService**: Motion capture data integration
 - **NmmService**: Non-Manual Markers data
 - **SuggestionService**: Autocomplete functionality
+- **RandomVideoService**: Fetches random videos from form_data
 - **ApiLogger**: Request/performance logging
 
 ### Database Integration
@@ -47,7 +48,12 @@ php tests/TestSentenceServices.php
 # Clear theme cache
 rm cache/themas.json
 
-# Theme cache is auto-generated on first request to /themas endpoint
+# Clear random video cache
+rm cache/random_video.json
+
+# Caches are auto-generated on first request after clearing:
+# - Theme cache: regenerated on /themas endpoint
+# - Random video cache: regenerated on /getRandomVideo.php endpoint (24-hour cache)
 ```
 
 ## API Endpoints and Usage
@@ -66,6 +72,11 @@ rm cache/themas.json
 
 4. **Suggestions**: POST to `/index.php` with `action=suggest`
    - Returns: autocomplete suggestions for search
+
+5. **Random Video**: `/getRandomVideo.php`
+   - Returns: single random video from form_data with 24-hour caching
+   - No parameters required
+   - Response includes: id, glos, senses, thema, videos (3 angles), nmm_data
 
 ## Important Technical Details
 

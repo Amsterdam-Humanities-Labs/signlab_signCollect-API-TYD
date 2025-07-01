@@ -58,6 +58,30 @@ The SignCollect API provides access to a collection of sign language videos, glo
 *   **Example:** `https://api.signcollect.nl/thema/dieren`
     *   This endpoint is typically accessed via `getThemeVideos.php`. The `.htaccess` will rewrite `/thema/{themeName}` to `getThemeVideos.php?theme={themeName}`.
 
+### Get Random Video
+
+*   **URL:** `/getRandomVideo.php`
+*   **Method:** GET
+*   **Description:** Retrieves a random video from the form_data collection with 24-hour caching.
+*   **Cache:** Results are cached for 24 hours to reduce database load.
+*   **Example:** `https://api.signcollect.nl/getRandomVideo.php`
+*   **Response Format:**
+    ```json
+    {
+        "id": "40260",
+        "senses": ["doel"],
+        "signbank": null,
+        "thema": "INTAKE EN DOSSIER",
+        "glos": "DOEL",
+        "videos": {
+            "videoLeft": "https://media.signcollect.nl/L20250331_7726.mp4",
+            "videoCenter": "https://media.signcollect.nl/M20250331_6747.mp4",
+            "videoRight": "https://media.signcollect.nl/R20250331_0355.mp4"
+        },
+        "nmm_data": []
+    }
+    ```
+
 
 ## Response Format
 
@@ -107,6 +131,7 @@ RewriteCond %{REQUEST_URI} !/index\\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/getVideos\\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/getThemas\\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/getThemeVideos\\.php$ [NC]
+RewriteCond %{REQUEST_URI} !/getRandomVideo\\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/submit\\.php$ [NC] # If submit.php needs to be directly accessible
 RewriteRule ^(.*)\\.php$ /$1 [R=301,L]
 
