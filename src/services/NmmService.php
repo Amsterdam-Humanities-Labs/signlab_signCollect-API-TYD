@@ -147,7 +147,10 @@ class NmmService
     public function searchNmmByGlos($keyword)
     {
         $nmmData = [];
-        $searchPattern = $keyword . '%';
+        // Convert spaces to hyphens and uppercase for gloss search
+        $glossKeyword = str_replace(' ', '-', $keyword);
+        $glossKeyword = strtoupper($glossKeyword);
+        $searchPattern = $glossKeyword . '%';
         
         // Fetch NMM data matching the glos pattern
         // Corrected SQL to select only existing columns based on provided schema

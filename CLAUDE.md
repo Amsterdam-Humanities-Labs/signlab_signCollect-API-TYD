@@ -11,15 +11,32 @@ This is a RESTful API providing access to sign language data including videos, g
 ### Service Layer Structure
 The API uses a service-oriented architecture with specialized services in `src/services/`:
 - **SearchService**: Core search functionality across all data types
+  - Converts spaces to hyphens for gloss searches (e.g., "niet waar" → "NIET-WAAR")
+  - Filters out gloss variants ending with -B through -Z patterns
 - **VideoService**: Handles video URL generation for entities
 - **SentenceService**: Manages sentence data and relationships
 - **SignbankService**: Integrates external Signbank database
 - **FormService**: Handles SignCollect form/gloss data
+  - Automatically converts spaces to hyphens in gloss searches
 - **MocapService**: Motion capture data integration
 - **NmmService**: Non-Manual Markers data
+  - Automatically converts spaces to hyphens in gloss searches
 - **SuggestionService**: Autocomplete functionality
+  - Requires minimum 3 characters for suggestions
+  - Returns up to 10 suggestions per category
+  - Three methods: `getWordSuggestions()`, `getLemmaSuggestions()`, `getSynonymSuggestions()`
+  - Currently only word suggestions are enabled in responses
 - **RandomVideoService**: Fetches random videos from form_data
 - **ApiLogger**: Request/performance logging
+
+### Admin Interface
+The API includes a web-based admin interface at `/admin/` for content management:
+- **Video Management**: Browse and manage sign language videos with square aspect ratio display
+- **Status Control**: Toggle video readiness status between "Ready" and "Not Ready"
+- **Hover Playback**: Videos auto-play on hover for quick preview
+- **Filtering**: Filter by status, theme, and search terms
+- **Bulk Operations**: Select multiple videos for batch status updates
+- **Statistics Dashboard**: Real-time counts of ready vs not-ready videos
 
 ### Database Integration
 - Direct MySQLi connections with UTF-8 encoding
@@ -62,6 +79,7 @@ rm cache/random_video.json
 1. **Search**: `/search/{query}` or POST to `/index.php`
    - Parameters: `q` (query), `resultType` (zinnen/glos/all), `groupByTheme` (true/false)
    - Returns: sentences, glosses, words, synonyms
+   - Note: Spaces in gloss searches are automatically converted to hyphens (e.g., "niet waar" → "NIET-WAAR")
 
 2. **Videos**: `/videos/{type}/{id}` or `/getVideos.php?type={type}&id={id}`
    - Types: zin, glos, sb, nmm
@@ -70,8 +88,18 @@ rm cache/random_video.json
 3. **Themes**: `/themas` (cached) and `/thema/{themeName}`
    - Returns: theme listings and associated glosses
 
-4. **Suggestions**: POST to `/index.php` with `action=suggest`
-   - Returns: autocomplete suggestions for search
+4. **Suggestions**: POST to `/index.php` with `suggestions=true`
+   - Purpose: Provides autocomplete/typeahead functionality for search
+   - Parameters: 
+     - `query`: The partial search term (minimum 3 characters required)
+     - `suggestions`: Must be set to `"true"` to trigger suggestion mode
+   - Returns: Array of word suggestions with their lemmas
+   - Implementation: 
+     - Uses `SuggestionService` class in `src/services/SuggestionService.php`
+     - Searches `hh_words` table for words starting with the query
+     - Returns up to 10 suggestions ordered alphabetically
+     - Currently only returns word suggestions (lemmas and synonyms temporarily disabled)
+   - Example: `curl -X POST -d "query=hui&suggestions=true" https://api.signcollect.nl/index.php`
 
 5. **Random Video**: `/getRandomVideo.php`
    - Returns: single random video from form_data with 24-hour caching

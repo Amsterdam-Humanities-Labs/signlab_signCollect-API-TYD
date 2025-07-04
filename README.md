@@ -82,6 +82,72 @@ The SignCollect API provides access to a collection of sign language videos, glo
     }
     ```
 
+### Suggestions (Autocomplete)
+
+*   **URL:** `/suggestions` or POST to `/index.php`
+*   **Method:** POST
+*   **Description:** Provides autocomplete suggestions for search queries. Returns matching words from the database to help users find relevant content.
+*   **Requirements:**
+    *   Minimum 3 characters required for suggestions
+    *   Currently only returns word suggestions (lemmas and synonyms are temporarily disabled)
+*   **POST Parameters:**
+    *   `query`: The partial search term (minimum 3 characters)
+    *   `suggestions`: Must be set to `"true"` to trigger suggestion mode
+*   **Example Request:**
+    ```bash
+    curl -X POST -d "query=hui&suggestions=true" https://api.signcollect.nl/index.php
+    ```
+*   **Response Format:**
+    ```json
+    {
+        "success": true,
+        "data": {
+            "suggestions": {
+                "words": [
+                    {
+                        "text": "huis",
+                        "lemma": "huis"
+                    },
+                    {
+                        "text": "huisarts",
+                        "lemma": "huisarts"
+                    },
+                    {
+                        "text": "huisdier",
+                        "lemma": "huisdier"
+                    }
+                ]
+            }
+        },
+        "response_time": 0.0234
+    }
+    ```
+*   **Implementation Details:**
+    *   Searches the `hh_words` table for words starting with the query
+    *   Returns up to 10 suggestions ordered alphabetically
+    *   Each suggestion includes the word text and its lemma
+    *   Lemmas and synonyms suggestions are implemented but temporarily disabled in the response
+
+## Admin Interface
+
+The API includes a web-based admin interface accessible at `/admin/` for content management:
+
+*   **URL:** `https://api.signcollect.nl/admin/`
+*   **Authentication:** Session-based login required
+*   **Features:**
+    *   **Video Management**: Browse sign language videos with square aspect ratio display
+    *   **Hover Playback**: Videos auto-play on hover for quick preview
+    *   **Status Toggle**: Mark videos as "Ready" or "Not Ready" for production use
+    *   **Filtering**: Filter by readiness status, theme, and search terms
+    *   **Bulk Operations**: Select multiple videos for batch status updates
+    *   **Statistics**: Real-time dashboard showing counts of ready vs not-ready videos
+    *   **Pagination**: Navigate through large collections of videos
+*   **Technical Details:**
+    *   Square (1:1) aspect ratio video thumbnails to match video format
+    *   Responsive design with Tailwind CSS
+    *   RESTful API backend for all operations
+    *   Session management with password hashing support
+
 
 ## Response Format
 

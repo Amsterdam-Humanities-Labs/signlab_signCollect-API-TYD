@@ -61,18 +61,23 @@ class SearchService
         $formResults = $this->searchForms($searchQuerySanitized, $offset, $limit);
         // $sbResults = $this->searchSignbank($searchQuery, $offset, $limit); // Temporarily disabled Signbank search
         
+        // Convert spaces to hyphens for gloss searches
+        $glossSearchQuery = str_replace(' ', '-', $searchQuery);
+        $glossSearchQuery = strtoupper($glossSearchQuery); // Glosses are typically uppercase
+        
         // Get FormService search results (priority over NMM)
         $formServiceResults = [];
         if ($this->formService) {
-            $formServiceResults = $this->formService->searchFormsByGlos($searchQuery);
+            $formServiceResults = $this->formService->searchFormsByGlos($glossSearchQuery);
             $this->response['debug']['form_service_search_count'] = count($formServiceResults);
+            $this->response['debug']['gloss_search_query'] = $glossSearchQuery;
         }
         
         $nmmResults = [];
         if ($this->nmmService) {
-            $nmmResults = $this->nmmService->searchNmmByGlos($searchQuery); // Use original $searchQuery for NMM service if it does its own sanitization or needs original form
+            $nmmResults = $this->nmmService->searchNmmByGlos($glossSearchQuery);
             // Add the NMM query to debug, using a representation of the query
-            $searchPatternNmm = $searchQuery . '%'; // Pattern used in NmmService
+            $searchPatternNmm = $glossSearchQuery . '%'; // Pattern used in NmmService
             $this->response['debug']['nmm_data_query'] = "SELECT id, name, description, type, signbank_id, glos FROM nmm_data WHERE glos LIKE '" . $this->conn->real_escape_string($searchPatternNmm) . "'";
         }
         
@@ -106,13 +111,15 @@ class SearchService
         $formServiceGlosValues = []; // Track glos values from FormService for priority system
         $formServiceIds = []; // Track IDs from FormService to avoid duplicates
 
-        // Helper function to check for forbidden pattern (e.g., "-B" through "-Z")
+        // Helper function to check for forbidden pattern (e.g., "-B" through "-Z") at the end of string
         $checkForbiddenPattern = function($text) {
             if (!is_string($text) || empty($text)) {
                 return false;
             }
-            // Matches a hyphen followed by an uppercase letter from B to Z
-            return preg_match('/-[B-Z]/', $text) === 1;
+            // Matches a hyphen followed by an uppercase letter from B to Z at the end of the string
+            // This filters out variant suffixes like AAP-B, AAP-C, etc.
+            // But keeps legitimate glosses like NIET-WAAR
+            return preg_match('/-[B-Z]$/', $text) === 1;
         };
 
         // Process FormService results FIRST (highest priority)
@@ -151,7 +158,7 @@ class SearchService
                     "type" => "glos",
                     "source" => "form_service", // Mark as FormService source
                     "videos" => $formServiceItem['videos'] ?? ['videoLeft' => null, 'videoCenter' => null, 'videoRight' => null],
-                    "mocap" => false,
+                    "mocap" => $this->mocapService !== null ? $this->mocapService->hasMocapData($formServiceItem['glos'] ?? $glosDisplayFormService) : false,
                     "nmm_data" => $formServiceItem['nmm_data'] ?? []
                 ];
                 $glosses[] = $mappedFormServiceItem;
@@ -213,7 +220,9 @@ class SearchService
                 }
                 
                 if ($this->mocapService !== null) {
-                    $form['mocap'] = $this->mocapService->hasMocapData($glosDisplay); 
+                    // Use the actual 'glos' field for mocap lookup, not the display name from senses
+                    $glosForMocap = $form['glos'] ?? $glosDisplay;
+                    $form['mocap'] = $this->mocapService->hasMocapData($glosForMocap); 
                 } else {
                     $form['mocap'] = false;
                 }
@@ -278,7 +287,7 @@ class SearchService
                     "type" => "nmm", // Use nmm type for nmm_data source
                     "source" => "nmm_data",
                     "videos" => $nmmItem['videos'] ?? ['videoLeft' => null, 'videoCenter' => null, 'videoRight' => null],
-                    "mocap" => false, // NMM data does not have mocap information
+                    "mocap" => $this->mocapService !== null ? $this->mocapService->hasMocapData($glosDisplayNMM) : false,
                     "nmm_type" => $nmmItem['type'] ?? '', 
                     "zelfopname" => $nmmItem['zelfopname'] ?? null
                 ];
@@ -595,8 +604,12 @@ class SearchService
         // $lemmas = $this->getLemmas($searchQuery);
 
         if (!empty($searchQuery)) { // Proceed if searchQuery is not empty
+            // Convert spaces to hyphens and uppercase for gloss search
+            $glossSearchQuery = str_replace(' ', '-', $searchQuery);
+            $glossSearchQuery = strtoupper($glossSearchQuery);
+            
             // Prepare the search pattern for LIKE query
-            $searchPattern = $searchQuery . '%';
+            $searchPattern = $glossSearchQuery . '%';
 
             // Query form_data using LIKE on the 'glos' field
             // Select 'glos' field as well, and 'senses' for consistent output structure.

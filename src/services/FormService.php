@@ -34,7 +34,10 @@ class FormService
     public function searchFormsByGlos($keyword)
     {
         $formData = [];
-        $searchPattern = $keyword . '%';
+        // Convert spaces to hyphens and uppercase for gloss search
+        $glossKeyword = str_replace(' ', '-', $keyword);
+        $glossKeyword = strtoupper($glossKeyword);
+        $searchPattern = $glossKeyword . '%';
         
         // Fetch form data matching the glos pattern
         // Note: Column name varies between databases - 'theme' in test, 'thema' in production
