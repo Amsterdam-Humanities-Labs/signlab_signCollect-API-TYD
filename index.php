@@ -87,6 +87,7 @@ try {
             $response['success'] = true;
             $response['data']['suggestions'] = [
                 'words' => [],
+                'sentences' => []
                 // 'lemmas' => [], // Temporarily disabled
                 // 'synonyms' => [] // Temporarily disabled
             ];
@@ -101,10 +102,10 @@ try {
         $logger->logRequest('suggestions', $searchQuery);
         
         // Get suggestions
-        // $response['data']['suggestions'] = $suggestionService->getSuggestions($searchQuery); // Original line
         $allSuggestions = $suggestionService->getSuggestions($searchQuery);
         $response['data']['suggestions'] = [
-            'words' => $allSuggestions['words'] ?? []
+            'words' => $allSuggestions['words'] ?? [],
+            'sentences' => $allSuggestions['sentences'] ?? []
             // 'lemmas' => $allSuggestions['lemmas'] ?? [], // Temporarily disabled
             // 'synonyms' => $allSuggestions['synonyms'] ?? [] // Temporarily disabled
         ];
