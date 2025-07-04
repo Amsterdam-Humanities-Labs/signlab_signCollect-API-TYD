@@ -515,43 +515,54 @@ class SearchService
     private function searchSentences($searchQuery, $offset, $limit)
     {
         $sentenceMatches = [];
-        $lemmas = $this->getLemmas($searchQuery);
         
-        if (!empty($lemmas)) {
-            foreach ($lemmas as $lemma) {
-                // Updated query to include thema field from sentences table
-                $sql = "SELECT ID, zinString, IFNULL(thema, 'Unknown') as thema FROM sentences WHERE JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?) LIMIT ?, ?";
-                $this->response['debug']['sentences_query'] = $sql;
+        // Check if searchQuery contains multiple words (spaces)
+        if (strpos($searchQuery, ' ') !== false) {
+            // Multi-word query: split into individual words and search for sentences containing all words
+            $words = array_filter(explode(' ', trim($searchQuery))); // Remove empty elements
+            $this->response['debug']['multi_word_search'] = $words;
+            
+            if (!empty($words)) {
+                // Build query to find sentences containing all words
+                $lemmaConditions = [];
+                $params = [];
+                
+                foreach ($words as $word) {
+                    $lemmaConditions[] = "(JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?))";
+                    $params[] = json_encode($word);
+                    $params[] = json_encode("\"$word\"");
+                }
+                
+                $sql = "SELECT ID, zinString, IFNULL(thema, 'Unknown') as thema FROM sentences WHERE " . implode(' AND ', $lemmaConditions) . " LIMIT ?, ?";
+                $this->response['debug']['sentences_multi_word_query'] = $sql;
                 
                 $stmt = $this->conn->prepare($sql);
                 if (!$stmt) {
                     $this->response['debug']['sentences_prepare_error'] = $this->conn->error;
-                    continue; // Continue with the next lemma instead of failing
+                    return $sentenceMatches;
                 }
                 
-                // Prepare for both formats the lemma might be stored in JSON
-                $lemmaJson = json_encode($lemma);
-                $lemmaQuotedJson = json_encode("\"$lemma\"");
-                $this->response['debug']['lemma_json'] = $lemmaJson;
-                $this->response['debug']['lemma_quoted_json'] = $lemmaQuotedJson;
+                // Build bind parameters: strings for each word (2 per word) + offset + limit
+                $bindTypes = str_repeat('s', count($params)) . 'ii';
+                $params[] = $offset;
+                $params[] = $limit;
                 
-                // Bind two strings and two integers (offset, limit)
-                $stmt->bind_param("ssii", $lemmaJson, $lemmaQuotedJson, $offset, $limit);
+                $stmt->bind_param($bindTypes, ...$params);
                 
                 if (!$stmt->execute()) {
                     $this->response['debug']['sentences_execute_error'] = $stmt->error;
                     $stmt->close();
-                    continue;
+                    return $sentenceMatches;
                 }
                 
                 $sentenceResult = $stmt->get_result();
                 $stmt->close();
                 
-                $this->response['debug']['sentences_found_for_lemma_' . $lemma] = $sentenceResult->num_rows;
+                $this->response['debug']['sentences_found_for_multi_word'] = $sentenceResult->num_rows;
                 
                 while ($sentence = $sentenceResult->fetch_assoc()) {
                     // Check if we already have this sentence using in_array
-                    $exists = in_array($sentence['ID'], array_column($sentenceMatches, 'id')); // Changed 'ID' to 'id' for the check key
+                    $exists = in_array($sentence['ID'], array_column($sentenceMatches, 'id'));
                     
                     if (!$exists) {
                         // First check if there's at least one row in matched_transcriptions with matching criteria and app_ready = 1
@@ -569,16 +580,87 @@ class SearchService
                         // Only add the sentence if it has a matching transcription
                         if ($hasMatchedTranscription) {
                             // Include thema in the basic sentence info
-                            $thema = $sentence['thema'] ?? "Unknown"; // Changed from theme to thema
+                            $thema = $sentence['thema'] ?? "Unknown";
                             $thema = strtolower($thema);
                             $thema = ucfirst($thema);
 
                             $sentenceMatches[] = [
-                                "id" => $sentence['ID'] ?? null, // Changed "ID" to "id"
-                                "zinstring" => $sentence['zinString'] ?? "", // Changed "zinString" to "zinstring"
-                                "thema" => $thema, // Changed from theme to thema
-                                "type" => "zin" // Add type for frontend to know which endpoint to call
+                                "id" => $sentence['ID'] ?? null,
+                                "zinstring" => $sentence['zinString'] ?? "",
+                                "thema" => $thema,
+                                "type" => "zin"
                             ];
+                        }
+                    }
+                }
+            }
+        } else {
+            // Single word query: use existing lemma-based search
+            $lemmas = $this->getLemmas($searchQuery);
+            
+            if (!empty($lemmas)) {
+                foreach ($lemmas as $lemma) {
+                    // Updated query to include thema field from sentences table
+                    $sql = "SELECT ID, zinString, IFNULL(thema, 'Unknown') as thema FROM sentences WHERE JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?) LIMIT ?, ?";
+                    $this->response['debug']['sentences_query'] = $sql;
+                    
+                    $stmt = $this->conn->prepare($sql);
+                    if (!$stmt) {
+                        $this->response['debug']['sentences_prepare_error'] = $this->conn->error;
+                        continue; // Continue with the next lemma instead of failing
+                    }
+                    
+                    // Prepare for both formats the lemma might be stored in JSON
+                    $lemmaJson = json_encode($lemma);
+                    $lemmaQuotedJson = json_encode("\"$lemma\"");
+                    $this->response['debug']['lemma_json'] = $lemmaJson;
+                    $this->response['debug']['lemma_quoted_json'] = $lemmaQuotedJson;
+                    
+                    // Bind two strings and two integers (offset, limit)
+                    $stmt->bind_param("ssii", $lemmaJson, $lemmaQuotedJson, $offset, $limit);
+                    
+                    if (!$stmt->execute()) {
+                        $this->response['debug']['sentences_execute_error'] = $stmt->error;
+                        $stmt->close();
+                        continue;
+                    }
+                    
+                    $sentenceResult = $stmt->get_result();
+                    $stmt->close();
+                    
+                    $this->response['debug']['sentences_found_for_lemma_' . $lemma] = $sentenceResult->num_rows;
+                    
+                    while ($sentence = $sentenceResult->fetch_assoc()) {
+                        // Check if we already have this sentence using in_array
+                        $exists = in_array($sentence['ID'], array_column($sentenceMatches, 'id')); // Changed 'ID' to 'id' for the check key
+                        
+                        if (!$exists) {
+                            // First check if there's at least one row in matched_transcriptions with matching criteria and app_ready = 1
+                            $hasMatchedTranscription = false;
+                            $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'zin' AND added = '1' AND app_ready = 1 LIMIT 1");
+                            if ($checkStmt) {
+                                $checkStmt->bind_param("i", $sentence['ID']);
+                                if ($checkStmt->execute()) {
+                                    $checkResult = $checkStmt->get_result();
+                                    $hasMatchedTranscription = $checkResult->num_rows > 0;
+                                }
+                                $checkStmt->close();
+                            }
+                            
+                            // Only add the sentence if it has a matching transcription
+                            if ($hasMatchedTranscription) {
+                                // Include thema in the basic sentence info
+                                $thema = $sentence['thema'] ?? "Unknown"; // Changed from theme to thema
+                                $thema = strtolower($thema);
+                                $thema = ucfirst($thema);
+
+                                $sentenceMatches[] = [
+                                    "id" => $sentence['ID'] ?? null, // Changed "ID" to "id"
+                                    "zinstring" => $sentence['zinString'] ?? "", // Changed "zinString" to "zinstring"
+                                    "thema" => $thema, // Changed from theme to thema
+                                    "type" => "zin" // Add type for frontend to know which endpoint to call
+                                ];
+                            }
                         }
                     }
                 }
