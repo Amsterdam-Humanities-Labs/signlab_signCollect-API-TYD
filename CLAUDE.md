@@ -79,7 +79,10 @@ rm cache/random_video.json
 1. **Search**: `/search/{query}` or POST to `/index.php`
    - Parameters: `q` (query), `resultType` (zinnen/glos/all), `groupByTheme` (true/false)
    - Returns: sentences, glosses, words, synonyms
-   - Note: Spaces in gloss searches are automatically converted to hyphens (e.g., "niet waar" → "NIET-WAAR")
+   - **Search Behavior**:
+     - **Single-word queries**: Uses lemma-based search for sentences, space-to-hyphen conversion for glosses
+     - **Multi-word queries**: Splits words and finds sentences containing ALL words (e.g., "mama broer" finds sentences with both words)
+     - **Gloss searches**: Converts spaces to hyphens for matching (e.g., "niet waar" → "NIET-WAAR")
 
 2. **Videos**: `/videos/{type}/{id}` or `/getVideos.php?type={type}&id={id}`
    - Types: zin, glos, sb, nmm
@@ -89,17 +92,26 @@ rm cache/random_video.json
    - Returns: theme listings and associated glosses
 
 4. **Suggestions**: POST to `/index.php` with `suggestions=true`
-   - Purpose: Provides autocomplete/typeahead functionality for search
+   - Purpose: Provides intelligent autocomplete/typeahead functionality for search
    - Parameters: 
      - `query`: The partial search term (minimum 3 characters required)
      - `suggestions`: Must be set to `"true"` to trigger suggestion mode
-   - Returns: Array of word suggestions with their lemmas
+   - Returns: Mixed suggestions (words + sentences) limited to 8 total items
+   - **Suggestion Distribution**:
+     - **Words**: Up to 3 suggestions from `hh_words` table
+     - **Sentences**: Up to 3 suggestions from `sentences` table  
+     - **Lemmas**: Up to 1 suggestion (temporarily disabled)
+     - **Synonyms**: Up to 1 suggestion (temporarily disabled)
+   - **Multi-word Support**: Queries like "mama broer" find sentences containing both words
    - Implementation: 
-     - Uses `SuggestionService` class in `src/services/SuggestionService.php`
-     - Searches `hh_words` table for words starting with the query
-     - Returns up to 10 suggestions ordered alphabetically
-     - Currently only returns word suggestions (lemmas and synonyms temporarily disabled)
-   - Example: `curl -X POST -d "query=hui&suggestions=true" https://api.signcollect.nl/index.php`
+     - Uses enhanced `SuggestionService` class in `src/services/SuggestionService.php`
+     - Word suggestions: Search `hh_words` table for words starting with query
+     - Sentence suggestions: Lemma-based search (single word) or multi-word AND logic
+     - Sentence truncation: Long sentences truncated to 60 chars with "..."
+     - App-ready validation: Only suggests sentences with available videos
+   - Examples: 
+     - Single word: `curl -X POST -d "query=mama&suggestions=true" https://api.signcollect.nl/index.php`
+     - Multi-word: `curl -X POST -d "query=mama broer&suggestions=true" https://api.signcollect.nl/index.php`
 
 5. **Random Video**: `/getRandomVideo.php`
    - Returns: single random video from form_data with 24-hour caching

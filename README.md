@@ -12,19 +12,24 @@ The SignCollect API provides access to a collection of sign language videos, glo
 
 *   **URL:** `/search/{query}`
 *   **Method:** GET (POST is also supported with `query` parameter in the body)
-*   **Description:** Searches for words, sentences, and glosses related to the query.
+*   **Description:** Searches for words, sentences, and glosses related to the query. Supports both single-word and multi-word searches.
+*   **Search Behavior:**
+    *   **Single-word queries**: Uses lemma-based search for sentences, space-to-hyphen conversion for glosses
+    *   **Multi-word queries**: Splits words and finds sentences containing ALL words (e.g., "mama broer" finds sentences with both "mama" and "broer")
+    *   **Gloss searches**: Converts spaces to hyphens for gloss matching (e.g., "niet waar" → "NIET-WAAR")
 *   **URL Parameters:**
-    *   `query`: The search term.
+    *   `query`: The search term (single word or multiple words separated by spaces).
 *   **Query Parameters (optional):**
     *   `offset`: (integer) Pagination offset. Default is 0.
     *   `resultType`: (string) Filter results by type. Allowed values: `all`, `sentences`, `glosses`. Default is `all`.
         *   `sentences`: Returns only sentences.
         *   `glosses`: Returns glosses from both `form_data` (SignCollect) and `sb_records` (Signbank).
     *   `groupByTheme`: (boolean) If `true`, results (sentences and glosses) will be grouped by theme. Default is `false`.
-*   **Example:** `https://api.signcollect.nl/search/huis`
+*   **Example (Single Word):** `https://api.signcollect.nl/search/huis`
+*   **Example (Multi-Word):** `https://api.signcollect.nl/search/mama%20broer`
 *   **Example with POST:**
     ```bash
-    curl -X POST -d "query=huis&resultType=sentences&groupByTheme=true" https://api.signcollect.nl/index.php
+    curl -X POST -d "query=mama broer&resultType=sentences&groupByTheme=true" https://api.signcollect.nl/index.php
     ```
 
 ### Get Videos for an Entity
@@ -86,16 +91,26 @@ The SignCollect API provides access to a collection of sign language videos, glo
 
 *   **URL:** `/suggestions` or POST to `/index.php`
 *   **Method:** POST
-*   **Description:** Provides autocomplete suggestions for search queries. Returns matching words from the database to help users find relevant content.
+*   **Description:** Provides intelligent autocomplete suggestions for search queries, including both words and sentences. Limited to 8 total suggestions for optimal user experience.
 *   **Requirements:**
     *   Minimum 3 characters required for suggestions
-    *   Currently only returns word suggestions (lemmas and synonyms are temporarily disabled)
+    *   Multi-word queries supported (e.g., "mama broer" finds sentences containing both words)
 *   **POST Parameters:**
     *   `query`: The partial search term (minimum 3 characters)
     *   `suggestions`: Must be set to `"true"` to trigger suggestion mode
-*   **Example Request:**
+*   **Suggestion Distribution:**
+    *   **Words**: Up to 3 word suggestions from `hh_words` table
+    *   **Sentences**: Up to 3 sentence suggestions from `sentences` table
+    *   **Lemmas**: Up to 1 lemma suggestion (temporarily disabled)
+    *   **Synonyms**: Up to 1 synonym suggestion (temporarily disabled)
+    *   **Total**: Maximum 8 suggestions across all categories
+*   **Example Request (Single Word):**
     ```bash
-    curl -X POST -d "query=hui&suggestions=true" https://api.signcollect.nl/index.php
+    curl -X POST -d "query=mama&suggestions=true" https://api.signcollect.nl/index.php
+    ```
+*   **Example Request (Multi-Word):**
+    ```bash
+    curl -X POST -d "query=mama broer&suggestions=true" https://api.signcollect.nl/index.php
     ```
 *   **Response Format:**
     ```json
@@ -105,16 +120,37 @@ The SignCollect API provides access to a collection of sign language videos, glo
             "suggestions": {
                 "words": [
                     {
-                        "text": "huis",
-                        "lemma": "huis"
+                        "text": "mama",
+                        "lemma": "mama",
+                        "type": "word"
                     },
                     {
-                        "text": "huisarts",
-                        "lemma": "huisarts"
+                        "text": "mama's",
+                        "lemma": "mama",
+                        "type": "word"
+                    }
+                ],
+                "sentences": [
+                    {
+                        "text": "Even bij mama blijven.",
+                        "full_text": "Even bij mama blijven.",
+                        "id": 30,
+                        "thema": "Lorraine",
+                        "type": "sentence"
                     },
                     {
-                        "text": "huisdier",
-                        "lemma": "huisdier"
+                        "text": "Ga je straks mee boodschappen doen met papa of wil je dat...",
+                        "full_text": "Ga je straks mee boodschappen doen met papa of wil je dat mama dat doet?",
+                        "id": 31,
+                        "thema": "Lorraine",
+                        "type": "sentence"
+                    },
+                    {
+                        "text": "Mama gaat even pinnen.",
+                        "full_text": "Mama gaat even pinnen.",
+                        "id": 39,
+                        "thema": "Lorraine",
+                        "type": "sentence"
                     }
                 ]
             }
@@ -122,11 +158,37 @@ The SignCollect API provides access to a collection of sign language videos, glo
         "response_time": 0.0234
     }
     ```
+*   **Multi-Word Example Response (for "mama broer"):**
+    ```json
+    {
+        "success": true,
+        "data": {
+            "suggestions": {
+                "words": [],
+                "sentences": [
+                    {
+                        "text": "Ik snap dat je het vervelend vindt dat mama nu met je bro...",
+                        "full_text": "Ik snap dat je het vervelend vindt dat mama nu met je broer bezig is, maar je moet nu even wachten.",
+                        "id": 157,
+                        "thema": "Lorraine",
+                        "type": "sentence"
+                    }
+                ]
+            }
+        },
+        "response_time": 0.0156
+    }
+    ```
 *   **Implementation Details:**
-    *   Searches the `hh_words` table for words starting with the query
-    *   Returns up to 10 suggestions ordered alphabetically
-    *   Each suggestion includes the word text and its lemma
-    *   Lemmas and synonyms suggestions are implemented but temporarily disabled in the response
+    *   **Word Suggestions**: Searches `hh_words` table for words starting with the query
+    *   **Sentence Suggestions**: 
+        *   Single-word: Uses lemma-based search in `sentences` table
+        *   Multi-word: Splits query and finds sentences containing ALL words
+        *   Truncates long sentences to 60 characters with "..." for display
+        *   Includes full sentence text in `full_text` field
+        *   Only includes sentences with `app_ready = 1` videos available
+    *   **Response Structure**: Each suggestion includes `type` field for identification
+    *   **Performance**: Optimized queries with appropriate limits per category
 
 ## Admin Interface
 
