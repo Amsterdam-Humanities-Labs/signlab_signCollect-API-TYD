@@ -177,8 +177,17 @@ The API provides specialized endpoints for the ZIN Project's sentence annotation
 
 8. **Get Video Data for Sentence**: `/getZinnenVideos.php`
    - Parameters: `sentenceId` (required): The sentence ID to fetch video data for
-   - Returns: complete video data with glosses, thumbnails, and matched transcriptions
+   - Returns: complete video data with glosses, thumbnails, and individual gloss videos
    - Usage: `curl "https://api.signcollect.nl/getZinnenVideos.php?sentenceId=4"`
+   - **Response Structure Explained**:
+     - `sentenceVideos`/`sentenceThumbnails`: Videos for the complete sentence from matched_transcriptions with zOg='zin'
+     - `glossVideosData`: Array of individual gloss video data, each containing:
+       - `gloss`: The gloss string
+       - `videos`/`thumbnails`: Video URLs for this specific gloss (3 camera angles)
+       - `formDataId`/`nmmId`: Source record IDs (one will be null, depending on data source)
+       - `dataSource`: Indicates origin ('form_data', 'nmm_data', or 'mixed' for multiple sources)
+     - `formDataIds`/`nmmIds`: Summary arrays of all IDs used
+     - `glossDataSource`: Overall data source summary ('form_data', 'nmm_data', 'mixed', or null)
    - Response format:
 ```json
 {
@@ -187,40 +196,53 @@ The API provides specialized endpoints for the ZIN Project's sentence annotation
     "sentenceId": 4,
     "zinString": "Doe maar je armen omhoog.",
     "glosses": ["PT-1hand", "HAND-OMHOOG"],
-    "formDataIds": [45, 67, 89],
-    "videos": {
+    "sentenceVideos": {
       "left": "https://media.signcollect.nl/L20250522_9306.mp4",
       "center": "https://media.signcollect.nl/M20250522_8329.mp4",
       "right": "https://media.signcollect.nl/R20250522_1935.mp4"
     },
-    "thumbnails": {
+    "sentenceThumbnails": {
       "left": "https://media.signcollect.nl/L20250522_9306.jpg",
       "center": "https://media.signcollect.nl/M20250522_8329.jpg",
       "right": "https://media.signcollect.nl/R20250522_1935.jpg"
     },
-    "matchedTranscriptions": {
-      "left": {
-        "id": "4",
-        "file": "L20250522_9306.wav",
-        "transcription_id": "4",
-        "added": "0",
-        "app_ready": 1
+    "glossVideosData": [
+      {
+        "gloss": "PT-1hand",
+        "videos": {
+          "left": "https://media.signcollect.nl/L20250601_1234.mp4",
+          "center": "https://media.signcollect.nl/M20250601_5678.mp4",
+          "right": "https://media.signcollect.nl/R20250601_9012.mp4"
+        },
+        "thumbnails": {
+          "left": "https://media.signcollect.nl/L20250601_1234.jpg",
+          "center": "https://media.signcollect.nl/M20250601_5678.jpg",
+          "right": "https://media.signcollect.nl/R20250601_9012.jpg"
+        },
+        "formDataId": 12345,
+        "nmmId": null,
+        "dataSource": "form_data"
       },
-      "center": {
-        "id": 28643,
-        "file": "M20250522_8329.wav",
-        "transcription_id": "4",
-        "added": "0",
-        "app_ready": 1
-      },
-      "right": {
-        "id": "4",
-        "file": "R20250522_1935.wav",
-        "transcription_id": "4",
-        "added": "0",
-        "app_ready": 1
+      {
+        "gloss": "HAND-OMHOOG",
+        "videos": {
+          "left": "https://media.signcollect.nl/L20250602_3456.mp4",
+          "center": "https://media.signcollect.nl/M20250602_7890.mp4",
+          "right": "https://media.signcollect.nl/R20250602_1234.mp4"
+        },
+        "thumbnails": {
+          "left": "https://media.signcollect.nl/L20250602_3456.jpg",
+          "center": "https://media.signcollect.nl/M20250602_7890.jpg",
+          "right": "https://media.signcollect.nl/R20250602_1234.jpg"
+        },
+        "formDataId": null,
+        "nmmId": 6789,
+        "dataSource": "nmm_data"
       }
-    }
+    ],
+    "formDataIds": [12345],
+    "nmmIds": [6789],
+    "glossDataSource": "mixed"
   }
 }
 ```
