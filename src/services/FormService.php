@@ -29,9 +29,10 @@ class FormService
      * Search form data by glos field (LIKE 'keyword%')
      * 
      * @param string $keyword The keyword to search for in the glos field
+     * @param int $limit Maximum number of results to return (default: 8)
      * @return array Array of form data matching the keyword
      */
-    public function searchFormsByGlos($keyword)
+    public function searchFormsByGlos($keyword, $limit = 8)
     {
         $formData = [];
         // Convert spaces to hyphens and uppercase for gloss search
@@ -44,7 +45,8 @@ class FormService
         $sql = "SELECT id, CAST(IF(senses = '', '[]', senses) AS JSON) AS senses, signbank, 
                        IFNULL(thema, 'Unknown') as thema, glos 
                 FROM form_data 
-                WHERE glos LIKE ? AND extern = '1' AND glosZichtbaar = '0'";
+                WHERE glos LIKE ? AND extern = '1' AND glosZichtbaar = '0'
+                LIMIT ?";
         
         $stmt = $this->conn->prepare($sql);
         if (!$stmt) {
@@ -52,7 +54,7 @@ class FormService
             return $formData;
         }
         
-        $stmt->bind_param("s", $searchPattern);
+        $stmt->bind_param("si", $searchPattern, $limit);
         
         if (!$stmt->execute()) {
             $this->response['debug']['form_glos_execute_error'] = $stmt->error;

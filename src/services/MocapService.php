@@ -40,8 +40,8 @@ class MocapService
         }
         
         try {
-            // Prepare the SQL query to check for the gloss identifier in the mocap_data table
-            $sql = "SELECT COUNT(*) as count FROM mocap_data WHERE glos = ? AND take IS NOT NULL";
+            // Prepare the SQL query to check for the gloss identifier in the mocap_files table
+            $sql = "SELECT COUNT(*) as count FROM mocap_files WHERE glos = ?";
             $stmt = $this->conn->prepare($sql);
             
             if (!$stmt) {

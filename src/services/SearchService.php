@@ -36,11 +36,11 @@ class SearchService
      * 
      * @param string $searchQuery Query string to search for
      * @param int $offset Pagination offset
+     * @param int $limit Results limit (default: 8)
      * @return array Search results
      */
-    public function search($searchQuery, $offset = 0)
+    public function search($searchQuery, $offset = 0, $limit = 8)
     {
-        $limit = 10;
         $this->response['debug']['received_query'] = $this->sanitizeOutput($searchQuery);
         
         // Handle empty searches - return empty result structure
@@ -68,21 +68,21 @@ class SearchService
         // Get FormService search results (priority over NMM)
         $formServiceResults = [];
         if ($this->formService) {
-            $formServiceResults = $this->formService->searchFormsByGlos($glossSearchQuery);
+            $formServiceResults = $this->formService->searchFormsByGlos($glossSearchQuery, $limit);
             $this->response['debug']['form_service_search_count'] = count($formServiceResults);
             $this->response['debug']['gloss_search_query'] = $glossSearchQuery;
         }
         
         $nmmResults = [];
         if ($this->nmmService) {
-            $nmmResults = $this->nmmService->searchNmmByGlos($glossSearchQuery);
+            $nmmResults = $this->nmmService->searchNmmByGlos($glossSearchQuery, $limit);
             // Add the NMM query to debug, using a representation of the query
             $searchPatternNmm = $glossSearchQuery . '%'; // Pattern used in NmmService
             $this->response['debug']['nmm_data_query'] = "SELECT id, name, description, type, signbank_id, glos FROM nmm_data WHERE glos LIKE '" . $this->conn->real_escape_string($searchPatternNmm) . "'";
         }
         
         // Merge forms, (sb_records), nmm_records, and form_service_results into glosses with duplicate removal and priority
-        $glosses = $this->mergeGlosses($formResults, [], $nmmResults, $formServiceResults); // Pass empty array for sbRecords, and new formServiceResults
+        $glosses = $this->mergeGlosses($formResults, [], $nmmResults, $formServiceResults, $limit); // Pass empty array for sbRecords, and new formServiceResults
         
         $results = [
             'words' => $this->searchWords($searchQuerySanitized),
@@ -102,9 +102,10 @@ class SearchService
      * @param array $sbRecords SignBank records results (will be empty if Signbank search is disabled)
      * @param array $nmmRecords NMM records results
      * @param array $formServiceResults FormService search results (highest priority)
+     * @param int $limit Maximum number of results to return
      * @return array Merged glosses without duplicates
      */
-    private function mergeGlosses($forms, $sbRecords, $nmmRecords = [], $formServiceResults = [])
+    private function mergeGlosses($forms, $sbRecords, $nmmRecords = [], $formServiceResults = [], $limit = 8)
     {
         $glosses = [];
         $processedGlosses = []; // Track processed glosses (primary display string) to avoid duplicates
@@ -297,7 +298,8 @@ class SearchService
             // Note: Original code did not have an else-if for empty glosDisplayNMM to add by ID.
         }
         
-        return $glosses;
+        // Apply the limit to the final merged results
+        return array_slice($glosses, 0, $limit);
     }
     
     /**

@@ -130,6 +130,11 @@ try {
         // Add offset for pagination
         $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
         
+        // Add limit parameter with default of 8
+        $limit = isset($_POST['limit']) ? intval($_POST['limit']) : 8;
+        // Ensure limit is reasonable (between 1 and 100)
+        $limit = max(1, min(100, $limit));
+        
         // Add resultType filter parameter (all, sentences, forms)
         $resultType = isset($_POST['resultType']) ? strtolower($_POST['resultType']) : 'all';
         
@@ -174,7 +179,7 @@ try {
         $logger->logRequest('search', $searchQuery);
         
         // Perform the search and get all results
-        $results = $searchService->search($searchQuery, $offset);
+        $results = $searchService->search($searchQuery, $offset, $limit);
         
         // Temporarily disable synonyms in search output
         // To re-enable, comment out the following unset line:

@@ -142,9 +142,10 @@ class NmmService
      * Search NMM data by glos field (LIKE 'keyword%')
      * 
      * @param string $keyword The keyword to search for in the glos field
+     * @param int $limit Maximum number of results to return (default: 8)
      * @return array Array of NMM data matching the keyword
      */
-    public function searchNmmByGlos($keyword)
+    public function searchNmmByGlos($keyword, $limit = 8)
     {
         $nmmData = [];
         // Convert spaces to hyphens and uppercase for gloss search
@@ -154,7 +155,7 @@ class NmmService
         
         // Fetch NMM data matching the glos pattern
         // Corrected SQL to select only existing columns based on provided schema
-        $sql = "SELECT id, signbank_id, glos, zelfopname, type, thema FROM nmm_data WHERE glos LIKE ?";
+        $sql = "SELECT id, signbank_id, glos, zelfopname, type, thema FROM nmm_data WHERE glos LIKE ? LIMIT ?";
         
         $stmt = $this->conn->prepare($sql);
         if (!$stmt) {
@@ -164,7 +165,7 @@ class NmmService
             return $nmmData;
         }
         
-        $stmt->bind_param("s", $searchPattern);
+        $stmt->bind_param("si", $searchPattern, $limit);
         
         if (!$stmt->execute()) {
             $this->response['debug']['nmm_glos_execute_error'] = $stmt->error;

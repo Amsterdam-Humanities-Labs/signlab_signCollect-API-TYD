@@ -39,6 +39,16 @@ try {
     // Initialize services
     $logger = new ApiLogger($conn);
     
+    // Handle CLI execution
+    if (php_sapi_name() === 'cli') {
+        $_GET = [];
+        // Parse command line arguments
+        for ($i = 1; $i < $argc; $i++) {
+            parse_str($argv[$i], $output);
+            $_GET = array_merge($_GET, $output);
+        }
+    }
+    
     // Get theme from query parameters
     $theme = isset($_GET['theme']) ? $_GET['theme'] : null;
 

@@ -1,23 +1,23 @@
 {
-    "timestamp": "2025-06-16 12:31:48",
+    "timestamp": "2025-06-16 17:01:22",
     "statistics": {
-        "total_tested": 1405,
-        "total_failed": 169,
+        "total_tested": 459,
+        "total_failed": 148,
         "sentences": {
             "tested": 0,
             "failed": 0
         },
         "nmm": {
-            "tested": 24,
+            "tested": 18,
             "failed": 18
         },
         "zin": {
-            "tested": 390,
-            "failed": 131
+            "tested": 381,
+            "failed": 130
         },
         "glos": {
-            "tested": 991,
-            "failed": 20
+            "tested": 60,
+            "failed": 0
         }
     },
     "failed_urls": [
@@ -786,13 +786,6 @@
         },
         {
             "type": "zin",
-            "id": "1987",
-            "name": "we moeten eerst nog insmeren met zonnebrand en dan gaan we zwemmen.",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250204_4360.mp4"
-        },
-        {
-            "type": "zin",
             "id": "2009",
             "name": "geef maar aan mama",
             "angle": "rechts",
@@ -937,146 +930,6 @@
             "name": "Ja, daar gaat het. Allemaal in Bobby's mond.",
             "angle": "rechts",
             "url": "https:\/\/media.signcollect.nl\/R20250429_1507.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "40072",
-            "name": "PROPERSONA",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7780.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "40196",
-            "name": "GENOGRAM",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7826.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "40207",
-            "name": "INTERGENERATIONEEL",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7831.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "40365",
-            "name": "IMAGINAIRE-EXPOSURE",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7867.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "40439",
-            "name": "APRAXIE",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7892.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "40650",
-            "name": "ANXIOLYTICA",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7772.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "40657",
-            "name": "METHYLFENIDAAT",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7901.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "43526",
-            "name": "ZUS",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7838.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "44617",
-            "name": "NUCHTER-B",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7898.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "52268",
-            "name": "SCHEMATHERAPEUT",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7873.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "54824",
-            "name": "BEWUSTZIJN",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7894.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "54849",
-            "name": "BROER",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7821.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "54850",
-            "name": "DOORVERWIJZEN-B",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7822.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "54851",
-            "name": "COMMUNICATIE INTAKE",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7852.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "54852",
-            "name": "COMMUNICATIE ONDERZOEK",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7854.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "54853",
-            "name": "AMBULANTE ZORG",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7771.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "54854",
-            "name": "PATROON-B",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7859.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "56389",
-            "name": "SOCIAL PSYCHIATRISCH VERPLEEGKUNDE",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7875.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "56390",
-            "name": "NARCISME-B",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7897.mp4"
-        },
-        {
-            "type": "glos",
-            "id": "56391",
-            "name": "PARANOIDE PSYCHOSE",
-            "angle": "midden",
-            "url": "https:\/\/media.signcollect.nl\/M20250515_7900.mp4"
         },
         {
             "type": "nmm",
