@@ -31,6 +31,10 @@ require_once 'TestSearchServices.php';
 require_once 'TestSentenceServices.php';
 require_once 'TestFormServices.php';
 require_once 'TestSearchServicesPriority.php';
+require_once 'TestGetZinnen.php';
+require_once 'TestGetZinnenThemas.php';
+require_once 'TestGetZinnenVideos.php';
+require_once 'TestNmmServiceAppReady.php';
 
 // Determine if running from CLI or browser
 $isCli = php_sapi_name() === 'cli';
@@ -181,6 +185,10 @@ $runner->addTestClass(new TestSearchServices());
 $runner->addTestClass(new TestSentenceServices());
 $runner->addTestClass(new TestFormServices());
 $runner->addTestClass(new TestSearchServicesPriority());
+$runner->addTestClass(new TestGetZinnen());
+$runner->addTestClass(new TestGetZinnenThemas());
+$runner->addTestClass(new TestGetZinnenVideos());
+$runner->addTestClass(new TestNmmServiceAppReady());
 
 // Run tests
 $runner->runTests();

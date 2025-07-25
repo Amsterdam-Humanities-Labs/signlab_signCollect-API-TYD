@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZIN API Test Interface</title>
+    
+    <!-- React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Material UI -->
+    <script src="https://unpkg.com/@material-ui/core@4.12.4/umd/material-ui.development.js"></script>
+    
+    <!-- Material Icons -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    
+    <!-- Google Fonts -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap">
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result-card {
+            margin-bottom: 16px;
+        }
+        .json-viewer {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            overflow: auto;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .thema-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .thema-card {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .thema-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .video-preview {
+            width: 100%;
+            max-width: 150px;
+            height: auto;
+            border-radius: 4px;
+        }
+        .gloss-chip {
+            background-color: #e3f2fd;
+            color: #1565c0;
+            padding: 4px 8px;
+            margin: 2px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const {
+            AppBar, Toolbar, Typography, Container, TextField, Button, Card, CardContent,
+            CardActions, CircularProgress, Divider, Tabs, Tab, Box, Accordion, AccordionSummary,
+            AccordionDetails, IconButton, Snackbar, Paper, Grid, List, ListItem, ListItemText,
+            Select, MenuItem, FormControl, InputLabel, Chip, Dialog, DialogTitle, DialogContent,
+            DialogActions, TableContainer, Table, TableHead, TableRow, TableCell, TableBody
+        } = MaterialUI;
+        
+        const { useState, useEffect, useCallback } = React;
+        
+        function TabPanel(props) {
+            const { children, value, index, ...other } = props;
+            
+            return (
+                <div
+                    role="tabpanel"
+                    hidden={value !== index}
+                    id={`simple-tabpanel-${index}`}
+                    aria-labelledby={`simple-tab-${index}`}
+                    {...other}
+                >
+                    {value === index && (
+                        <Box p={3}>
+                            {children}
+                        </Box>
+                    )}
+                </div>
+            );
+        }
+        
+        function JSONViewer({ data }) {
+            return (
+                <pre className="json-viewer">
+                    {JSON.stringify(data, null, 2)}
+                </pre>
+            );
+        }
+
+        // Component for displaying themas
+        function ThemaCard({ thema, onClick }) {
+            return (
+                <Card className="thema-card" onClick={() => onClick(thema)}>
+                    <CardContent>
+                        <Typography variant="h6" component="h3">
+                            {thema}
+                        </Typography>
+                    </CardContent>
+                </Card>
+            );
+        }
+
+        // Component for displaying sentences
+        function SentenceCard({ sentence, onViewVideo }) {
+            return (
+                <Card className="result-card">
+                    <CardContent>
+                        <Typography variant="h6">ID: {sentence.id}</Typography>
+                        <Typography variant="body1" gutterBottom>
+                            {sentence.zinString || sentence.zin || 'No sentence text'}
+                        </Typography>
+                        {sentence.thema && (
+                            <Typography variant="body2" color="textSecondary">
+                                Thema: {sentence.thema}
+                            </Typography>
+                        )}
+                        {sentence.glosses && sentence.glosses.length > 0 && (
+                            <Box mt={1}>
+                                <Typography variant="body2">Glosses:</Typography>
+                                {sentence.glosses.map((gloss, index) => (
+                                    <span key={index} className="gloss-chip">{gloss}</span>
+                                ))}
+                            </Box>
+                        )}
+                    </CardContent>
+                    <CardActions>
+                        <Button 
+                            size="small" 
+                            color="primary" 
+                            startIcon={<span className="material-icons">videocam</span>}
+                            onClick={() => onViewVideo(sentence.id)}
+                        >
+                            View Video Data
+                        </Button>
+                    </CardActions>
+                </Card>
+            );
+        }
+
+        // Component for displaying video data
+        function VideoDataDisplay({ videoData, isLoading }) {
+            if (isLoading) {
+                return (
+                    <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+                        <CircularProgress size={60} />
+                        <Typography variant="h6" style={{ marginLeft: '16px' }}>
+                            Loading video data...
+                        </Typography>
+                    </Box>
+                );
+            }
+            
+            if (!videoData) {
+                return (
+                    <Box textAlign="center" py={4}>
+                        <Typography variant="h6" color="textSecondary">
+                            Enter a sentence ID above to load video data
+                        </Typography>
+                    </Box>
+                );
+            }
+
+            const hasSentenceVideos = videoData.sentenceVideos && Object.keys(videoData.sentenceVideos).length > 0;
+            const hasGlossVideosData = videoData.glossVideosData && videoData.glossVideosData.length > 0;
+            const hasSentenceThumbnails = videoData.sentenceThumbnails && Object.keys(videoData.sentenceThumbnails).length > 0;
+
+            return (
+                <div>
+                    <Typography variant="h6" gutterBottom>
+                        Sentence ID: {videoData.sentenceId}
+                    </Typography>
+                    <Typography variant="body1" gutterBottom>
+                        Text: {videoData.zinString}
+                    </Typography>
+                    
+                    {videoData.glosses && videoData.glosses.length > 0 && (
+                        <Box mb={3}>
+                            <Typography variant="subtitle1">Glosses:</Typography>
+                            <Typography variant="body2" color="textSecondary" gutterBottom>
+                                These glosses are used to find related video content via form_data records
+                            </Typography>
+                            {videoData.glosses.map((gloss, index) => (
+                                <span key={index} className="gloss-chip">{gloss}</span>
+                            ))}
+                        </Box>
+                    )}
+
+                    {hasGlossVideosData && (
+                        <Box mb={3}>
+                            <Typography variant="subtitle1">
+                                Gloss Data Sources: {videoData.glossDataSource || 'Unknown'}
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary" gutterBottom>
+                                {videoData.glossDataSource === 'form_data' && 'All videos sourced from form_data records'}
+                                {videoData.glossDataSource === 'nmm_data' && 'All videos sourced from NMM data (fallback used)'}
+                                {videoData.glossDataSource === 'mixed' && 'Videos from mixed sources (form_data + NMM fallback)'}
+                                {!videoData.glossDataSource && 'Source information not available'}
+                            </Typography>
+                            
+                            {/* Show summary of IDs */}
+                            {videoData.formDataIds && videoData.formDataIds.length > 0 && (
+                                <Box mb={1}>
+                                    <Typography variant="body2" style={{ fontWeight: 'bold' }}>Form Data IDs ({videoData.formDataIds.length}):</Typography>
+                                    {videoData.formDataIds.map((id, index) => (
+                                        <Chip 
+                                            key={index} 
+                                            label={`ID: ${id}`} 
+                                            variant="outlined" 
+                                            size="small" 
+                                            style={{ margin: '2px', backgroundColor: '#e3f2fd' }}
+                                        />
+                                    ))}
+                                </Box>
+                            )}
+                            
+                            {videoData.nmmIds && videoData.nmmIds.length > 0 && (
+                                <Box mb={1}>
+                                    <Typography variant="body2" style={{ fontWeight: 'bold' }}>NMM Data IDs ({videoData.nmmIds.length}):</Typography>
+                                    {videoData.nmmIds.map((id, index) => (
+                                        <Chip 
+                                            key={index} 
+                                            label={`NMM ID: ${id}`} 
+                                            variant="outlined" 
+                                            size="small" 
+                                            style={{ margin: '2px', backgroundColor: '#fff3e0' }}
+                                        />
+                                    ))}
+                                </Box>
+                            )}
+                        </Box>
+                    )}
+
+                    <Divider style={{ margin: '24px 0' }} />
+
+                    {/* SENTENCE VIDEOS SECTION */}
+                    <Typography variant="h6" gutterBottom style={{ color: '#1976d2' }}>
+                        📹 Sentence Videos (from matched_transcriptions where zOg='zin')
+                    </Typography>
+                    
+                    {hasSentenceVideos && (
+                        <Box mb={3}>
+                            <Typography variant="body2" color="textSecondary" gutterBottom>
+                                Video files directly linked to this sentence via matched_transcriptions
+                            </Typography>
+                            <Grid container spacing={2}>
+                                {Object.entries(videoData.sentenceVideos).map(([angle, url]) => (
+                                    <Grid item xs={12} md={4} key={`sentence-video-${angle}`}>
+                                        <Card>
+                                            <CardContent>
+                                                <Typography variant="subtitle2" gutterBottom>
+                                                    {angle.charAt(0).toUpperCase() + angle.slice(1)} Camera
+                                                </Typography>
+                                                <video controls className="video-preview">
+                                                    <source src={url} type="video/mp4" />
+                                                    Your browser does not support video.
+                                                </video>
+                                                <Box mt={1}>
+                                                    <Button 
+                                                        size="small" 
+                                                        href={url} 
+                                                        target="_blank"
+                                                        variant="outlined"
+                                                        fullWidth
+                                                    >
+                                                        Open in New Tab
+                                                    </Button>
+                                                </Box>
+                                            </CardContent>
+                                        </Card>
+                                    </Grid>
+                                ))}
+                            </Grid>
+                        </Box>
+                    )}
+
+                    {hasSentenceThumbnails && (
+                        <Box mb={3}>
+                            <Typography variant="subtitle1" gutterBottom>Sentence Thumbnails:</Typography>
+                            <Grid container spacing={2}>
+                                {Object.entries(videoData.sentenceThumbnails).map(([angle, url]) => (
+                                    <Grid item xs={12} md={4} key={`sentence-thumb-${angle}`}>
+                                        <Card>
+                                            <CardContent>
+                                                <Typography variant="subtitle2" gutterBottom>
+                                                    {angle.charAt(0).toUpperCase() + angle.slice(1)} Thumbnail
+                                                </Typography>
+                                                <img 
+                                                    src={url} 
+                                                    alt={`${angle} sentence thumbnail`}
+                                                    className="video-preview"
+                                                    onError={(e) => {
+                                                        e.target.style.display = 'none';
+                                                        e.target.nextSibling.style.display = 'block';
+                                                    }}
+                                                />
+                                                <Typography 
+                                                    variant="body2" 
+                                                    color="textSecondary" 
+                                                    style={{ display: 'none', textAlign: 'center', marginTop: '8px' }}
+                                                >
+                                                    Thumbnail not available
+                                                </Typography>
+                                            </CardContent>
+                                        </Card>
+                                    </Grid>
+                                ))}
+                            </Grid>
+                        </Box>
+                    )}
+
+                    {!hasSentenceVideos && !hasSentenceThumbnails && (
+                        <Box mb={3}>
+                            <Typography variant="body2" color="textSecondary" style={{ fontStyle: 'italic' }}>
+                                No sentence videos found. This sentence may not have direct video recordings.
+                            </Typography>
+                        </Box>
+                    )}
+
+                    <Divider style={{ margin: '24px 0' }} />
+
+                    {/* GLOSS VIDEOS SECTION */}
+                    <Typography variant="h6" gutterBottom style={{ color: '#ff9800' }}>
+                        🎯 Individual Gloss Videos 
+                        {videoData.glossDataSource === 'form_data' && ' (from form_data → matched_transcriptions)'}
+                        {videoData.glossDataSource === 'nmm_data' && ' (from NMM data - fallback)'}
+                        {videoData.glossDataSource === 'mixed' && ' (mixed sources)'}
+                        {!videoData.glossDataSource && ' (source unknown)'}
+                    </Typography>
+
+                    {hasGlossVideosData ? (
+                        <Box mb={3}>
+                            <Typography variant="body2" color="textSecondary" gutterBottom>
+                                Videos for each individual gloss in the sentence. Each gloss may have its own set of camera angles.
+                                <br />
+                                <strong>Note:</strong> Uses exact matching for gloss lookup to avoid partial matches (e.g., "PO" won't match "POES").
+                            </Typography>
+                            
+                            {videoData.glossVideosData.map((glossData, glossIndex) => {
+                                const hasVideos = glossData.videos && Object.keys(glossData.videos).length > 0;
+                                const hasThumbnails = glossData.thumbnails && Object.keys(glossData.thumbnails).length > 0;
+                                
+                                return (
+                                    <Box key={glossIndex} mb={4}>
+                                        {/* Gloss Header */}
+                                        <Typography variant="h6" gutterBottom style={{ 
+                                            backgroundColor: glossData.dataSource === 'form_data' ? '#e3f2fd' : '#fff3e0',
+                                            padding: '8px 16px',
+                                            borderRadius: '4px',
+                                            display: 'inline-block'
+                                        }}>
+                                            "{glossData.gloss}" 
+                                            {glossData.dataSource === 'form_data' && ` (Form Data ID: ${glossData.formDataId})`}
+                                            {glossData.dataSource === 'nmm_data' && ` (NMM ID: ${glossData.nmmId})`}
+                                        </Typography>
+                                        
+                                        {/* Videos for this gloss */}
+                                        {hasVideos && (
+                                            <Box mb={2}>
+                                                <Typography variant="subtitle1" gutterBottom>Videos:</Typography>
+                                                <Grid container spacing={2}>
+                                                    {Object.entries(glossData.videos).map(([angle, url]) => (
+                                                        <Grid item xs={12} md={4} key={`${glossData.gloss}-video-${angle}`}>
+                                                            <Card>
+                                                                <CardContent>
+                                                                    <Typography variant="subtitle2" gutterBottom>
+                                                                        {angle.charAt(0).toUpperCase() + angle.slice(1)} Camera
+                                                                    </Typography>
+                                                                    <video controls className="video-preview">
+                                                                        <source src={url} type="video/mp4" />
+                                                                        Your browser does not support video.
+                                                                    </video>
+                                                                    <Box mt={1}>
+                                                                        <Button 
+                                                                            size="small" 
+                                                                            href={url} 
+                                                                            target="_blank"
+                                                                            variant="outlined"
+                                                                            fullWidth
+                                                                        >
+                                                                            Open in New Tab
+                                                                        </Button>
+                                                                    </Box>
+                                                                </CardContent>
+                                                            </Card>
+                                                        </Grid>
+                                                    ))}
+                                                </Grid>
+                                            </Box>
+                                        )}
+                                        
+                                        {/* Thumbnails for this gloss */}
+                                        {hasThumbnails && (
+                                            <Box mb={2}>
+                                                <Typography variant="subtitle1" gutterBottom>Thumbnails:</Typography>
+                                                <Grid container spacing={2}>
+                                                    {Object.entries(glossData.thumbnails).map(([angle, url]) => (
+                                                        <Grid item xs={12} md={4} key={`${glossData.gloss}-thumb-${angle}`}>
+                                                            <Card>
+                                                                <CardContent>
+                                                                    <Typography variant="subtitle2" gutterBottom>
+                                                                        {angle.charAt(0).toUpperCase() + angle.slice(1)} Thumbnail
+                                                                    </Typography>
+                                                                    <img 
+                                                                        src={url} 
+                                                                        alt={`${glossData.gloss} ${angle} thumbnail`}
+                                                                        className="video-preview"
+                                                                        onError={(e) => {
+                                                                            e.target.style.display = 'none';
+                                                                            e.target.nextSibling.style.display = 'block';
+                                                                        }}
+                                                                    />
+                                                                    <Typography 
+                                                                        variant="body2" 
+                                                                        color="textSecondary" 
+                                                                        style={{ display: 'none', textAlign: 'center', marginTop: '8px' }}
+                                                                    >
+                                                                        Thumbnail not available
+                                                                    </Typography>
+                                                                </CardContent>
+                                                            </Card>
+                                                        </Grid>
+                                                    ))}
+                                                </Grid>
+                                            </Box>
+                                        )}
+                                        
+                                        {/* No data message for this gloss */}
+                                        {!hasVideos && !hasThumbnails && (
+                                            <Typography variant="body2" color="textSecondary" style={{ fontStyle: 'italic', marginLeft: '16px' }}>
+                                                No videos or thumbnails found for this gloss.
+                                            </Typography>
+                                        )}
+                                        
+                                        {glossIndex < videoData.glossVideosData.length - 1 && (
+                                            <Divider style={{ margin: '16px 0' }} />
+                                        )}
+                                    </Box>
+                                );
+                            })}
+                        </Box>
+                    ) : (
+                        <Box mb={3}>
+                            <Typography variant="body2" color="textSecondary" style={{ fontStyle: 'italic' }}>
+                                No gloss videos found. The glosses may not have corresponding form_data records 
+                                or matched_transcriptions with app_ready=1.
+                            </Typography>
+                        </Box>
+                    )}
+
+                    {!hasSentenceVideos && !hasGlossVideosData && !hasSentenceThumbnails && (
+                        <Box mb={3}>
+                            <Typography variant="h6" color="textSecondary" style={{ fontStyle: 'italic', textAlign: 'center' }}>
+                                No video or thumbnail data found for this sentence or its glosses.
+                            </Typography>
+                        </Box>
+                    )}
+                </div>
+            );
+        }
+
+        function App() {
+            const [tabValue, setTabValue] = useState(0);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const [snackbarOpen, setSnackbarOpen] = useState(false);
+            
+            // Themas tab state
+            const [themas, setThemas] = useState([]);
+            const [themasLoading, setThemasLoading] = useState(false);
+            
+            // Sentences tab state
+            const [selectedThema, setSelectedThema] = useState('');
+            const [sentences, setSentences] = useState([]);
+            const [sentencesLoading, setSentencesLoading] = useState(false);
+            const [sentenceLimit, setSentenceLimit] = useState(20);
+            const [sentenceOffset, setSentenceOffset] = useState(0);
+            const [sentenceCount, setSentenceCount] = useState(0);
+            
+            // Video data tab state
+            const [sentenceId, setSentenceId] = useState('');
+            const [videoData, setVideoData] = useState(null);
+            const [videoLoading, setVideoLoading] = useState(false);
+            
+            // Raw responses for JSON viewer
+            const [themasResponse, setThemasResponse] = useState(null);
+            const [sentencesResponse, setSentencesResponse] = useState(null);
+            const [videoResponse, setVideoResponse] = useState(null);
+
+            // Fetch all themas
+            const fetchThemas = useCallback(async () => {
+                setThemasLoading(true);
+                try {
+                    const response = await fetch('/getZinnenThemas.php');
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    setThemasResponse(data);
+                    
+                    if (data.success && data.data && data.data.themas) {
+                        setThemas(data.data.themas);
+                    } else {
+                        console.error('API Response:', data);
+                        throw new Error(data.errors && data.errors.length > 0 ? data.errors.join(', ') : 'Failed to fetch themas - no error details provided');
+                    }
+                } catch (err) {
+                    setError(`Error fetching themas: ${err.message}`);
+                    setSnackbarOpen(true);
+                } finally {
+                    setThemasLoading(false);
+                }
+            }, []);
+
+            // Fetch sentences by thema
+            const fetchSentences = useCallback(async (thema, limit = 20, offset = 0) => {
+                if (!thema) return;
+                
+                setSentencesLoading(true);
+                try {
+                    const response = await fetch(`/getZinnen.php?thema=${encodeURIComponent(thema)}&limit=${limit}&offset=${offset}`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    setSentencesResponse(data);
+                    
+                    if (data.success && data.data && data.data.sentences) {
+                        setSentences(data.data.sentences);
+                        setSentenceCount(data.data.count || 0);
+                    } else {
+                        console.error('API Response:', data);
+                        throw new Error(data.errors && data.errors.length > 0 ? data.errors.join(', ') : 'Failed to fetch sentences - no error details provided');
+                    }
+                } catch (err) {
+                    setError(`Error fetching sentences: ${err.message}`);
+                    setSnackbarOpen(true);
+                } finally {
+                    setSentencesLoading(false);
+                }
+            }, []);
+
+            // Fetch video data for sentence
+            const fetchVideoData = useCallback(async (id) => {
+                if (!id) return;
+                
+                setVideoLoading(true);
+                try {
+                    const response = await fetch(`/getZinnenVideos.php?sentenceId=${id}`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    setVideoResponse(data);
+                    
+                    if (data.success && data.data) {
+                        setVideoData(data.data);
+                    } else {
+                        console.error('API Response:', data);
+                        throw new Error(data.errors && data.errors.length > 0 ? data.errors.join(', ') : 'Failed to fetch video data - no error details provided');
+                    }
+                } catch (err) {
+                    setError(`Error fetching video data: ${err.message}`);
+                    setSnackbarOpen(true);
+                } finally {
+                    setVideoLoading(false);
+                }
+            }, []);
+
+            // Load themas on component mount
+            useEffect(() => {
+                fetchThemas();
+            }, [fetchThemas]);
+
+            const handleTabChange = (event, newValue) => {
+                setTabValue(newValue);
+            };
+
+            const handleSnackbarClose = () => {
+                setSnackbarOpen(false);
+            };
+
+            const handleThemaSelect = (thema) => {
+                setSelectedThema(thema);
+                setTabValue(1); // Switch to sentences tab
+                setSentenceOffset(0);
+                fetchSentences(thema, sentenceLimit, 0);
+            };
+
+            const handleSentencesSearch = () => {
+                if (selectedThema) {
+                    fetchSentences(selectedThema, sentenceLimit, sentenceOffset);
+                }
+            };
+
+            const handlePrevPage = () => {
+                const newOffset = Math.max(0, sentenceOffset - sentenceLimit);
+                setSentenceOffset(newOffset);
+                fetchSentences(selectedThema, sentenceLimit, newOffset);
+            };
+
+            const handleNextPage = () => {
+                const newOffset = sentenceOffset + sentenceLimit;
+                setSentenceOffset(newOffset);
+                fetchSentences(selectedThema, sentenceLimit, newOffset);
+            };
+
+            const handleViewVideo = (id) => {
+                setSentenceId(id.toString());
+                setTabValue(2); // Switch to video data tab
+                // Clear previous video data before fetching new data
+                setVideoData(null);
+                setVideoResponse(null);
+                fetchVideoData(id);
+            };
+
+            const handleVideoSearch = () => {
+                if (sentenceId) {
+                    // Clear previous video data before fetching new data
+                    setVideoData(null);
+                    setVideoResponse(null);
+                    fetchVideoData(sentenceId);
+                }
+            };
+
+            return (
+                <div>
+                    <AppBar position="static" color="primary">
+                        <Toolbar>
+                            <Typography variant="h6">
+                                ZIN API Test Interface
+                            </Typography>
+                        </Toolbar>
+                    </AppBar>
+                    
+                    {(themasLoading || sentencesLoading || videoLoading) && (
+                        <div className="loading-overlay">
+                            <CircularProgress size={60} />
+                        </div>
+                    )}
+                    
+                    <Container className="container">
+                        <Paper style={{ marginTop: '20px' }}>
+                            <Tabs
+                                value={tabValue}
+                                onChange={handleTabChange}
+                                indicatorColor="primary"
+                                textColor="primary"
+                                variant="fullWidth"
+                            >
+                                <Tab label="Themas" />
+                                <Tab label="Sentences" />
+                                <Tab label="Video Data" />
+                                <Tab label="Raw JSON" />
+                            </Tabs>
+                            
+                            <TabPanel value={tabValue} index={0}>
+                                <Typography variant="h5" gutterBottom>
+                                    All Themas ({themas.length})
+                                </Typography>
+                                <Button 
+                                    variant="outlined" 
+                                    onClick={fetchThemas}
+                                    disabled={themasLoading}
+                                    startIcon={<span className="material-icons">refresh</span>}
+                                >
+                                    Refresh Themas
+                                </Button>
+                                <div className="thema-grid">
+                                    {themas.map((thema, index) => (
+                                        <ThemaCard 
+                                            key={index} 
+                                            thema={thema} 
+                                            onClick={handleThemaSelect}
+                                        />
+                                    ))}
+                                </div>
+                            </TabPanel>
+                            
+                            <TabPanel value={tabValue} index={1}>
+                                <Typography variant="h5" gutterBottom>
+                                    Sentences by Thema
+                                </Typography>
+                                <Grid container spacing={2} alignItems="center" style={{ marginBottom: '20px' }}>
+                                    <Grid item xs={12} md={4}>
+                                        <FormControl fullWidth>
+                                            <InputLabel>Select Thema</InputLabel>
+                                            <Select 
+                                                value={selectedThema} 
+                                                onChange={(e) => setSelectedThema(e.target.value)}
+                                            >
+                                                {themas.map((thema, index) => (
+                                                    <MenuItem key={index} value={thema}>
+                                                        {thema}
+                                                    </MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    </Grid>
+                                    <Grid item xs={12} md={2}>
+                                        <TextField
+                                            fullWidth
+                                            label="Limit"
+                                            type="number"
+                                            value={sentenceLimit}
+                                            onChange={(e) => setSentenceLimit(parseInt(e.target.value) || 20)}
+                                            inputProps={{ min: 1, max: 1000 }}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={2}>
+                                        <TextField
+                                            fullWidth
+                                            label="Offset"
+                                            type="number"
+                                            value={sentenceOffset}
+                                            onChange={(e) => setSentenceOffset(parseInt(e.target.value) || 0)}
+                                            inputProps={{ min: 0 }}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={4}>
+                                        <Button 
+                                            fullWidth
+                                            variant="contained" 
+                                            color="primary"
+                                            onClick={handleSentencesSearch}
+                                            disabled={!selectedThema || sentencesLoading}
+                                        >
+                                            Search Sentences
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                                
+                                {sentences.length > 0 && (
+                                    <Box mb={2}>
+                                        <Typography variant="body1" gutterBottom>
+                                            Showing {sentences.length} sentences (offset: {sentenceOffset})
+                                        </Typography>
+                                        <Box display="flex" gap={1}>
+                                            <Button 
+                                                variant="outlined" 
+                                                onClick={handlePrevPage}
+                                                disabled={sentenceOffset === 0}
+                                            >
+                                                Previous
+                                            </Button>
+                                            <Button 
+                                                variant="outlined" 
+                                                onClick={handleNextPage}
+                                                disabled={sentences.length < sentenceLimit}
+                                            >
+                                                Next
+                                            </Button>
+                                        </Box>
+                                    </Box>
+                                )}
+                                
+                                {sentences.map((sentence, index) => (
+                                    <SentenceCard 
+                                        key={sentence.id || index} 
+                                        sentence={sentence} 
+                                        onViewVideo={handleViewVideo}
+                                    />
+                                ))}
+                                
+                                {sentences.length === 0 && selectedThema && !sentencesLoading && (
+                                    <Typography>No sentences found for this thema.</Typography>
+                                )}
+                            </TabPanel>
+                            
+                            <TabPanel value={tabValue} index={2}>
+                                <Typography variant="h5" gutterBottom>
+                                    Video Data for Sentence
+                                </Typography>
+                                <Grid container spacing={2} alignItems="center" style={{ marginBottom: '20px' }}>
+                                    <Grid item xs={12} md={8}>
+                                        <TextField
+                                            fullWidth
+                                            label="Sentence ID"
+                                            value={sentenceId}
+                                            onChange={(e) => setSentenceId(e.target.value)}
+                                            type="number"
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={4}>
+                                        <Button 
+                                            fullWidth
+                                            variant="contained" 
+                                            color="primary"
+                                            onClick={handleVideoSearch}
+                                            disabled={!sentenceId || videoLoading}
+                                        >
+                                            Get Video Data
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                                
+                                <VideoDataDisplay videoData={videoData} isLoading={videoLoading} />
+                            </TabPanel>
+                            
+                            <TabPanel value={tabValue} index={3}>
+                                <Typography variant="h5" gutterBottom>
+                                    Raw JSON Responses
+                                </Typography>
+                                
+                                <Accordion>
+                                    <AccordionSummary expandIcon={<span className="material-icons">expand_more</span>}>
+                                        <Typography variant="h6">Themas Response</Typography>
+                                    </AccordionSummary>
+                                    <AccordionDetails>
+                                        {themasResponse ? <JSONViewer data={themasResponse} /> : <Typography>No data</Typography>}
+                                    </AccordionDetails>
+                                </Accordion>
+                                
+                                <Accordion>
+                                    <AccordionSummary expandIcon={<span className="material-icons">expand_more</span>}>
+                                        <Typography variant="h6">Sentences Response</Typography>
+                                    </AccordionSummary>
+                                    <AccordionDetails>
+                                        {sentencesResponse ? <JSONViewer data={sentencesResponse} /> : <Typography>No data</Typography>}
+                                    </AccordionDetails>
+                                </Accordion>
+                                
+                                <Accordion>
+                                    <AccordionSummary expandIcon={<span className="material-icons">expand_more</span>}>
+                                        <Typography variant="h6">Video Data Response</Typography>
+                                    </AccordionSummary>
+                                    <AccordionDetails>
+                                        {videoResponse ? <JSONViewer data={videoResponse} /> : <Typography>No data</Typography>}
+                                    </AccordionDetails>
+                                </Accordion>
+                            </TabPanel>
+                        </Paper>
+                    </Container>
+                    
+                    <Snackbar
+                        open={snackbarOpen}
+                        autoHideDuration={6000}
+                        onClose={handleSnackbarClose}
+                        message={error}
+                        action={
+                            <IconButton
+                                size="small"
+                                color="inherit"
+                                onClick={handleSnackbarClose}
+                            >
+                                <span className="material-icons">close</span>
+                            </IconButton>
+                        }
+                    />
+                </div>
+            );
+        }
+        
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>

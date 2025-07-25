@@ -139,23 +139,29 @@ class NmmService
     }
     
     /**
-     * Search NMM data by glos field (LIKE 'keyword%')
+     * Search NMM data by glos field with configurable matching
      * 
      * @param string $keyword The keyword to search for in the glos field
      * @param int $limit Maximum number of results to return (default: 8)
+     * @param bool $exactMatch If true, use exact match; if false, use wildcard match (default: false)
      * @return array Array of NMM data matching the keyword
      */
-    public function searchNmmByGlos($keyword, $limit = 8)
+    public function searchNmmByGlos($keyword, $limit = 8, $exactMatch = false)
     {
         $nmmData = [];
         // Convert spaces to hyphens and uppercase for gloss search
         $glossKeyword = str_replace(' ', '-', $keyword);
         $glossKeyword = strtoupper($glossKeyword);
-        $searchPattern = $glossKeyword . '%';
         
-        // Fetch NMM data matching the glos pattern
-        // Corrected SQL to select only existing columns based on provided schema
-        $sql = "SELECT id, signbank_id, glos, zelfopname, type, thema FROM nmm_data WHERE glos LIKE ? LIMIT ?";
+        if ($exactMatch) {
+            // Use exact match for sentence gloss video lookup
+            $sql = "SELECT id, signbank_id, glos, zelfopname, type, thema FROM nmm_data WHERE glos = ? LIMIT ?";
+            $searchValue = $glossKeyword;
+        } else {
+            // Use wildcard match for general search (default behavior)
+            $sql = "SELECT id, signbank_id, glos, zelfopname, type, thema FROM nmm_data WHERE glos LIKE ? LIMIT ?";
+            $searchValue = $glossKeyword . '%';
+        }
         
         $stmt = $this->conn->prepare($sql);
         if (!$stmt) {
@@ -165,7 +171,7 @@ class NmmService
             return $nmmData;
         }
         
-        $stmt->bind_param("si", $searchPattern, $limit);
+        $stmt->bind_param("si", $searchValue, $limit);
         
         if (!$stmt->execute()) {
             $this->response['debug']['nmm_glos_execute_error'] = $stmt->error;
@@ -181,22 +187,7 @@ class NmmService
                 $nmmId = $nmmRow['id']; // This is the ID from nmm_data
                 $nmmRecord = $nmmRow;
                 
-                // Check if this nmm record has app_ready = 1 in matched_transcriptions
-                $hasAppReady = false;
-                $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'nmm' AND app_ready = 1 AND added = '1' LIMIT 1");
-                if ($checkStmt) {
-                    $checkStmt->bind_param("i", $nmmId);
-                    if ($checkStmt->execute()) {
-                        $checkResult = $checkStmt->get_result();
-                        $hasAppReady = $checkResult->num_rows > 0;
-                    }
-                    $checkStmt->close();
-                }
-                
-                // Skip this nmm if no app_ready videos
-                if (!$hasAppReady) {
-                    continue;
-                }
+                // Note: app_ready check has been disabled as requested
                 
                 // Fetch videos from 'nmm' source
                 $videosNMM = $this->_fetchLastVideoSet((string)$nmmId, "zOg LIKE '%nmm%'");
@@ -245,7 +236,7 @@ class NmmService
         }
 
         $sql = "SELECT l_file, m_file, r_file FROM matched_transcriptions 
-                WHERE m_transcription = ? AND " . $zOgCondition . " AND app_ready = 1 AND added = '1'";
+                WHERE m_transcription = ? AND " . $zOgCondition . " AND added = '1'";
 
         $stmt = $this->conn->prepare($sql);
         if ($stmt) {

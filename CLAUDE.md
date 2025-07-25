@@ -15,12 +15,19 @@ The API uses a service-oriented architecture with specialized services in `src/s
   - Filters out gloss variants ending with -B through -Z patterns
 - **VideoService**: Handles video URL generation for entities
 - **SentenceService**: Manages sentence data and relationships
+  - `getAllThemas()`: Fetch all unique themas from sentences table
+  - `getSentencesByThema($thema, $limit, $offset)`: Get sentences for specific thema with pagination
+  - `getVideoDataForSentence($sentenceId)`: Get complete video data with glosses, thumbnails, and matched transcriptions
+  - Extracts glosses from sentences.glosses field (JSON format)
+  - Generates thumbnail URLs by converting .wav to .jpg extensions
+  - **app_ready filtering disabled**: Returns all data regardless of app_ready status for comprehensive annotation workflows
 - **SignbankService**: Integrates external Signbank database
 - **FormService**: Handles SignCollect form/gloss data
   - Automatically converts spaces to hyphens in gloss searches
 - **MocapService**: Motion capture data integration
 - **NmmService**: Non-Manual Markers data
   - Automatically converts spaces to hyphens in gloss searches
+  - **app_ready filtering disabled**: Returns all NMM data regardless of app_ready status
 - **SuggestionService**: Autocomplete functionality
   - Requires minimum 3 characters for suggestions
   - Returns up to 10 suggestions per category
@@ -54,6 +61,10 @@ php tests/TestRunner.php
 php tests/TestVideoServices.php
 php tests/TestSearchServices.php
 php tests/TestSentenceServices.php
+php tests/TestGetZinnen.php
+php tests/TestGetZinnenThemas.php
+php tests/TestGetZinnenVideos.php
+php tests/TestNmmServiceAppReady.php
 ```
 
 ### Testing the API
@@ -77,7 +88,12 @@ rm cache/random_video.json
 
 ### Main Endpoints
 1. **Search**: `/search/{query}` or POST to `/index.php`
-   - Parameters: `q` (query), `resultType` (zinnen/glos/all), `groupByTheme` (true/false)
+   - Parameters: 
+     - `q` (query): Search term
+     - `resultType` (optional): zinnen/glos/all (default: all)
+     - `groupByTheme` (optional): true/false (default: false)
+     - `limit` (optional): Results limit (default: 8, max: 100)
+     - `offset` (optional): Pagination offset (default: 0)
    - Returns: sentences, glosses, words, synonyms
    - **Search Behavior**:
      - **Single-word queries**: Uses lemma-based search for sentences, space-to-hyphen conversion for glosses
@@ -108,7 +124,7 @@ rm cache/random_video.json
      - Word suggestions: Search `hh_words` table for words starting with query
      - Sentence suggestions: Lemma-based search (single word) or multi-word AND logic
      - Sentence truncation: Long sentences truncated to 60 chars with "..."
-     - App-ready validation: Only suggests sentences with available videos
+     - Note: app_ready validation has been disabled for ZIN Project endpoints
    - Examples: 
      - Single word: `curl -X POST -d "query=mama&suggestions=true" https://api.signcollect.nl/index.php`
      - Multi-word: `curl -X POST -d "query=mama broer&suggestions=true" https://api.signcollect.nl/index.php`
@@ -117,6 +133,103 @@ rm cache/random_video.json
    - Returns: single random video from form_data with 24-hour caching
    - No parameters required
    - Response includes: id, glos, senses, thema, videos (3 angles), nmm_data
+
+## Recent Changes: app_ready Filtering Disabled
+
+**Important Update**: The `app_ready` filtering has been disabled across all ZIN Project endpoints and related services to support comprehensive annotation workflows. This affects:
+
+### Modified Services
+- **SentenceService**: 
+  - `getMatchedTranscriptionsByFormId()`: No longer filters by `app_ready = 1`
+  - `getSentenceVideoData()`: No longer filters by `app_ready = 1`
+- **NmmService**:
+  - `searchNmmByGlos()`: No longer checks for `app_ready = 1` videos
+  - `_fetchLastVideoSet()`: No longer filters by `app_ready = 1`
+
+### Impact
+- All sentences, videos, and NMM data are now returned regardless of readiness status
+- Enables annotation of work-in-progress content
+- Provides complete data access for comprehensive annotation workflows
+- May include videos that are still being processed or reviewed
+
+### Testing
+- New test files created to verify app_ready filtering is properly disabled
+- Existing tests updated to reflect the new behavior
+
+## ZIN Project Sentence Management Endpoints
+
+The API provides specialized endpoints for the ZIN Project's sentence annotation tool:
+
+6. **Get All Themas**: `/getZinnenThemas.php`
+   - Returns: all unique themas from the sentences table
+   - No parameters required
+   - Usage: `curl https://api.signcollect.nl/getZinnenThemas.php`
+   - Response includes: array of 90+ unique themas
+
+7. **Get Sentences by Thema**: `/getZinnen.php`
+   - Parameters: 
+     - `thema` (required): The thema to filter by
+     - `limit` (optional): Maximum results (default: 100, max: 1000)
+     - `offset` (optional): Pagination offset (default: 0)
+   - Returns: sentences for the specified thema with pagination
+   - Usage: `curl "https://api.signcollect.nl/getZinnen.php?thema=Aankleden&limit=20"`
+   - Response includes: sentences array, count, pagination info
+
+8. **Get Video Data for Sentence**: `/getZinnenVideos.php`
+   - Parameters: `sentenceId` (required): The sentence ID to fetch video data for
+   - Returns: complete video data with glosses, thumbnails, and matched transcriptions
+   - Usage: `curl "https://api.signcollect.nl/getZinnenVideos.php?sentenceId=4"`
+   - Response format:
+```json
+{
+  "success": true,
+  "data": {
+    "sentenceId": 4,
+    "zinString": "Doe maar je armen omhoog.",
+    "glosses": ["PT-1hand", "HAND-OMHOOG"],
+    "formDataIds": [45, 67, 89],
+    "videos": {
+      "left": "https://media.signcollect.nl/L20250522_9306.mp4",
+      "center": "https://media.signcollect.nl/M20250522_8329.mp4",
+      "right": "https://media.signcollect.nl/R20250522_1935.mp4"
+    },
+    "thumbnails": {
+      "left": "https://media.signcollect.nl/L20250522_9306.jpg",
+      "center": "https://media.signcollect.nl/M20250522_8329.jpg",
+      "right": "https://media.signcollect.nl/R20250522_1935.jpg"
+    },
+    "matchedTranscriptions": {
+      "left": {
+        "id": "4",
+        "file": "L20250522_9306.wav",
+        "transcription_id": "4",
+        "added": "0",
+        "app_ready": 1
+      },
+      "center": {
+        "id": 28643,
+        "file": "M20250522_8329.wav",
+        "transcription_id": "4",
+        "added": "0",
+        "app_ready": 1
+      },
+      "right": {
+        "id": "4",
+        "file": "R20250522_1935.wav",
+        "transcription_id": "4",
+        "added": "0",
+        "app_ready": 1
+      }
+    }
+  }
+}
+```
+
+### ZIN Project Workflow
+1. **Fetch Themas**: Use `/getZinnenThemas.php` to populate thema dropdown
+2. **Browse Sentences**: Use `/getZinnen.php?thema=X` to get sentences for selected thema
+3. **Load Video Data**: Use `/getZinnenVideos.php?sentenceId=X` to get complete video/gloss data
+4. **Annotation**: Use returned glosses, videos, and thumbnails for timeline annotation
 
 ## Important Technical Details
 
@@ -181,9 +294,9 @@ The API serves videos from `https://media.signcollect.nl/` with three camera ang
 - **rechts** (right camera)
 
 ### Data Sources for Videos
-1. **Sentences (zin)**: From `sentences` table linked via `matched_transcriptions` with `zOg='zin'`
-2. **Form Data (glos)**: From `form_data` table with `extern='1'` and `glosZichtbaar='0'` linked via `matched_transcriptions` with `zOg IN ('glos', 'extern')`
-3. **NMM Data**: From `nmm_data` table linked via `matched_transcriptions` with `zOg='nmm'`
+1. **Sentences (zin)**: From `sentences` table linked via `matched_transcriptions` with `zOg='zin'` (app_ready filtering disabled)
+2. **Form Data (glos)**: From `form_data` table with `extern='1'` and `glosZichtbaar='0'` linked via `matched_transcriptions` with `zOg IN ('glos', 'extern')` (app_ready filtering disabled)
+3. **NMM Data**: From `nmm_data` table linked via `matched_transcriptions` with `zOg='nmm'` (app_ready filtering disabled)
 
 ### Priority System for Gloss Data
 When both `form_data` and `nmm_data` contain records with the same `glos` value:

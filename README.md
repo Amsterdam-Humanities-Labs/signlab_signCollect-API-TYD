@@ -21,6 +21,7 @@ The SignCollect API provides access to a collection of sign language videos, glo
     *   `query`: The search term (single word or multiple words separated by spaces).
 *   **Query Parameters (optional):**
     *   `offset`: (integer) Pagination offset. Default is 0.
+    *   `limit`: (integer) Results limit. Default is 8, maximum is 100.
     *   `resultType`: (string) Filter results by type. Allowed values: `all`, `sentences`, `glosses`. Default is `all`.
         *   `sentences`: Returns only sentences.
         *   `glosses`: Returns glosses from both `form_data` (SignCollect) and `sb_records` (Signbank).
@@ -186,9 +187,149 @@ The SignCollect API provides access to a collection of sign language videos, glo
         *   Multi-word: Splits query and finds sentences containing ALL words
         *   Truncates long sentences to 60 characters with "..." for display
         *   Includes full sentence text in `full_text` field
-        *   Only includes sentences with `app_ready = 1` videos available
+        *   Note: app_ready filtering has been disabled for ZIN Project endpoints
     *   **Response Structure**: Each suggestion includes `type` field for identification
     *   **Performance**: Optimized queries with appropriate limits per category
+
+## ZIN Project Sentence Management Endpoints
+
+The API provides specialized endpoints for the ZIN Project's sentence annotation tool, enabling efficient sentence browsing and video data retrieval for annotation workflows.
+
+**Important Note**: As of recent updates, all ZIN Project endpoints (`getZinnen.php`, `getZinnenThemas.php`, `getZinnenVideos.php`) have had their `app_ready` filtering disabled. This means all sentences and videos are returned regardless of their readiness status, enabling comprehensive annotation workflows that include work-in-progress content.
+
+### Get All Themas
+
+*   **URL:** `/getZinnenThemas.php`
+*   **Method:** GET
+*   **Description:** Retrieves all unique themas from the sentences table to populate theme selection interfaces.
+*   **Parameters:** None required
+*   **Example:** `https://api.signcollect.nl/getZinnenThemas.php`
+*   **Response Format:**
+    ```json
+    {
+        "success": true,
+        "data": {
+            "themas": [
+                "Aankleden",
+                "Afspraken",
+                "Attitude",
+                "Auto",
+                "Avondeten",
+                // ... ~90 unique themas
+            ]
+        },
+        "response_time": 0.006
+    }
+    ```
+
+### Get Sentences by Thema
+
+*   **URL:** `/getZinnen.php`
+*   **Method:** GET or POST
+*   **Description:** Retrieves sentences for a specific thema with pagination support for efficient browsing.
+*   **Parameters:**
+    *   `thema` (required): The thema to filter by (e.g., "Aankleden")
+    *   `limit` (optional): Maximum results per page (default: 100, max: 1000)
+    *   `offset` (optional): Pagination offset for browsing large collections (default: 0)
+*   **Example:** `https://api.signcollect.nl/getZinnen.php?thema=Aankleden&limit=20&offset=0`
+*   **Response Format:**
+    ```json
+    {
+        "success": true,
+        "data": {
+            "sentences": [
+                {
+                    "id": 1,
+                    "zinString": "Doe je je jas aan?",
+                    "thema": "Aankleden"
+                },
+                {
+                    "id": 15,
+                    "zinString": "Trek je schoenen uit.",
+                    "thema": "Aankleden"
+                }
+                // ... more sentences
+            ],
+            "thema": "Aankleden",
+            "count": 89,
+            "limit": 20,
+            "offset": 0
+        },
+        "response_time": 0.012
+    }
+    ```
+
+### Get Video Data for Sentence
+
+*   **URL:** `/getZinnenVideos.php`
+*   **Method:** GET or POST
+*   **Description:** Retrieves comprehensive video data for a sentence including glosses, video URLs, thumbnails, and matched transcription details. Essential for annotation workflows.
+*   **Parameters:**
+    *   `sentenceId` (required): The sentence ID to fetch video data for
+*   **Example:** `https://api.signcollect.nl/getZinnenVideos.php?sentenceId=4`
+*   **Response Format:**
+    ```json
+    {
+        "success": true,
+        "data": {
+            "sentenceId": 4,
+            "zinString": "Doe maar je armen omhoog.",
+            "glosses": ["PT-1hand", "HAND-OMHOOG"],
+            "formDataIds": [],
+            "videos": {
+                "left": "https://media.signcollect.nl/L20250522_9306.mp4",
+                "center": "https://media.signcollect.nl/M20250522_8329.mp4",
+                "right": "https://media.signcollect.nl/R20250522_1935.mp4"
+            },
+            "thumbnails": {
+                "left": "https://media.signcollect.nl/L20250522_9306.jpg",
+                "center": "https://media.signcollect.nl/M20250522_8329.jpg",
+                "right": "https://media.signcollect.nl/R20250522_1935.jpg"
+            },
+            "matchedTranscriptions": {
+                "left": {
+                    "id": "4",
+                    "file": "L20250522_9306.wav",
+                    "transcription_id": "4",
+                    "added": "0",
+                    "app_ready": 1
+                },
+                "center": {
+                    "id": 28643,
+                    "file": "M20250522_8329.wav",
+                    "transcription_id": "4",
+                    "added": "0",
+                    "app_ready": 1
+                },
+                "right": {
+                    "id": "4",
+                    "file": "R20250522_1935.wav",
+                    "transcription_id": "4",
+                    "added": "0",
+                    "app_ready": 1
+                }
+            }
+        },
+        "response_time": 0.018
+    }
+    ```
+
+### ZIN Project Annotation Workflow
+
+The ZIN Project endpoints support a complete annotation workflow:
+
+1. **Theme Selection**: Use `/getZinnenThemas.php` to populate a theme dropdown menu
+2. **Sentence Browsing**: Use `/getZinnen.php?thema=X` to load sentences for the selected theme with pagination
+3. **Video Loading**: Use `/getZinnenVideos.php?sentenceId=X` to load complete video data for annotation
+4. **Timeline Annotation**: Use the returned glosses, videos, and thumbnails to create frame-precise annotations
+
+**Key Features:**
+*   **Multiple Camera Angles**: Left, center, and right video angles for comprehensive coverage
+*   **Automatic Thumbnails**: Thumbnail URLs generated by converting .wav extensions to .jpg
+*   **Gloss Integration**: Extracts glosses from sentences table in JSON format
+*   **Form Data Mapping**: Attempts to map glosses to form_data IDs for additional context
+*   **Matched Transcriptions**: Complete metadata for each video file including transcription IDs and readiness status
+*   **No app_ready Filtering**: All videos are returned regardless of app_ready status to support comprehensive annotation workflows
 
 ## Admin Interface
 
