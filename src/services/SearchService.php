@@ -65,7 +65,7 @@ class SearchService
         $glossSearchQuery = str_replace(' ', '-', $searchQuery);
         $glossSearchQuery = strtoupper($glossSearchQuery); // Glosses are typically uppercase
         
-        // Get FormService search results (priority over NMM)
+        // Get FormService search results
         $formServiceResults = [];
         if ($this->formService) {
             $formServiceResults = $this->formService->searchFormsByGlos($glossSearchQuery, $limit);
@@ -95,13 +95,35 @@ class SearchService
     }
     
     /**
+     * Get the latest matched_transcriptions ID for a gloss across all sources
+     * 
+     * @param string $gloss The gloss to check
+     * @return array|null Latest transcription info with source details
+     */
+    private function getLatestTranscriptionForGloss($gloss)
+    {
+        if (!$gloss) return null;
+        
+        // Use LatestTranscriptionService if available through FormService
+        if ($this->formService && method_exists($this->formService, 'getLatestTranscriptionService')) {
+            $latestTranscriptionService = $this->formService->getLatestTranscriptionService();
+            if ($latestTranscriptionService) {
+                $latestMatch = $latestTranscriptionService->getLatestMatchedTranscriptionForGloss($gloss);
+                return $latestMatch;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
      * Merge forms, SignBank records, NMM records, and FormService results into a single glosses array with duplicates removed
-     * Priority: FormService > NMM when glos values overlap
+     * Priority is now determined by latest matched_transcriptions timestamp rather than source type
      * 
      * @param array $forms Form data results (from searchForms)
      * @param array $sbRecords SignBank records results (will be empty if Signbank search is disabled)
      * @param array $nmmRecords NMM records results
-     * @param array $formServiceResults FormService search results (highest priority)
+     * @param array $formServiceResults FormService search results
      * @param int $limit Maximum number of results to return
      * @return array Merged glosses without duplicates
      */
@@ -109,7 +131,6 @@ class SearchService
     {
         $glosses = [];
         $processedGlosses = []; // Track processed glosses (primary display string) to avoid duplicates
-        $formServiceGlosValues = []; // Track glos values from FormService for priority system
         $formServiceIds = []; // Track IDs from FormService to avoid duplicates
 
         // Helper function to check for forbidden pattern (e.g., "-B" through "-Z") at the end of string
@@ -123,7 +144,7 @@ class SearchService
             return preg_match('/-[B-Z]$/', $text) === 1;
         };
 
-        // Process FormService results FIRST (highest priority)
+        // Process FormService results
         foreach ($formServiceResults as $formServiceItem) {
             $formServiceGlosValue = $formServiceItem['glos'] ?? null;
 
@@ -137,7 +158,6 @@ class SearchService
 
             if (!empty($glosDisplayFormService) && !in_array($glosDisplayFormService, $processedGlosses)) {
                 $processedGlosses[] = $glosDisplayFormService;
-                $formServiceGlosValues[] = $glosDisplayFormService; // Track for priority
                 $formServiceIds[] = $formServiceItem['id']; // Track ID for deduplication
 
                 // Process senses array from FormService
@@ -253,7 +273,7 @@ class SearchService
             }
         }
 
-        // Process NMM records (lower priority than FormService)
+        // Process NMM records
         foreach ($nmmRecords as $nmmItem) {
             $nmmGlosValue = $nmmItem['glos'] ?? null; // Actual 'glos' field from nmm_data
 
@@ -264,14 +284,29 @@ class SearchService
 
             $glosDisplayNMM = $nmmGlosValue ?? ''; // Use NMM 'glos' for duplicate check and as primary sense
 
-            // PRIORITY SYSTEM: Skip if FormService already has this glos value
-            if (!empty($glosDisplayNMM) && in_array($glosDisplayNMM, $formServiceGlosValues)) {
-                $this->response['debug']['skipped_nmm_for_formservice_priority'][] = [
-                    'nmm_id' => $nmmItem['id'] ?? 'unknown', 
-                    'glos_value' => $glosDisplayNMM,
-                    'reason' => 'FormService takes priority'
-                ];
-                continue; // Skip this NMM item as FormService has priority
+            // Check if there's already a FormService record that uses the same latest matched_transcriptions
+            $skipNmmForLatestTranscription = false;
+            if (!empty($glosDisplayNMM)) {
+                $latestTranscription = $this->getLatestTranscriptionForGloss($glosDisplayNMM);
+                if ($latestTranscription) {
+                    // Check if any existing FormService record uses the same source
+                    foreach ($glosses as $existingGloss) {
+                        if ($existingGloss['source'] === 'form_service' && $existingGloss['id'] == $latestTranscription['source']['id']) {
+                            $skipNmmForLatestTranscription = true;
+                            $this->response['debug']['skipped_nmm_for_same_latest_transcription'][] = [
+                                'nmm_id' => $nmmItem['id'] ?? 'unknown',
+                                'nmm_gloss' => $glosDisplayNMM,
+                                'form_service_id' => $existingGloss['id'],
+                                'matched_transcription_id' => $latestTranscription['transcription']['id']
+                            ];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if ($skipNmmForLatestTranscription) {
+                continue;
             }
 
             // Process the NMM glos value using the helper function

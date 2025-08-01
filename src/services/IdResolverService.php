@@ -1,28 +1,31 @@
 <?php
 /**
  * Service for resolving IDs between form_data and nmm_data tables
- * Priority: nmm_data > form_data when signbank_id exists
+ * Priority: form_data > nmm_data when form_data has latest matched_transcriptions
  */
 class IdResolverService
 {
     private $conn;
     private $response;
+    private $latestTranscriptionService;
     
     /**
      * Constructor
      * 
      * @param mysqli $conn Database connection
      * @param array $response Reference to response array
+     * @param LatestTranscriptionService $latestTranscriptionService Latest transcription service
      */
-    public function __construct($conn, &$response)
+    public function __construct($conn, &$response, $latestTranscriptionService = null)
     {
         $this->conn = $conn;
         $this->response = &$response;
+        $this->latestTranscriptionService = $latestTranscriptionService;
     }
     
     /**
      * Resolve ID based on priority system
-     * Priority: nmm_data > form_data when signbank_id exists
+     * Priority: form_data > nmm_data when form_data has latest matched_transcriptions
      * 
      * @param int $id The original ID
      * @param string $type The type of ID ('glos' for form_data, 'nmm' for nmm_data)
@@ -40,40 +43,77 @@ class IdResolverService
             'source' => $type === 'glos' ? 'form_data' : 'nmm_data'
         ];
         
-        // If type is 'glos' (form_data), check for signbank_id and nmm_data priority
+        // If type is 'glos' (form_data), check if it has the latest matched_transcriptions
         if ($type === 'glos') {
-            $signbankId = $this->checkFormDataSignbank($id);
+            $formMetadata = $this->getFormDataMetadata($id);
             
-            if ($signbankId) {
-                $resolvedData['signbankId'] = $signbankId;
-                $this->response['debug']['found_signbank_id'] = $signbankId;
+            if ($formMetadata && !empty($formMetadata['glos'])) {
+                $resolvedData['signbankId'] = $formMetadata['signbank'];
                 
-                // Look for nmm_data with this signbank_id
-                $nmmData = $this->findNmmBySignbankId($signbankId);
-                
-                if (!empty($nmmData)) {
-                    // Check if nmm_data has matching videos in matched_transcriptions
-                    foreach ($nmmData as $nmm) {
-                        if ($this->hasMatchedTranscriptions($nmm['id'], ['nmm', 'glos'])) {
-                            // Found nmm_data with videos, use it instead
-                            $resolvedData['resolvedId'] = $nmm['id'];
-                            $resolvedData['resolvedType'] = 'nmm';
+                // Use LatestTranscriptionService to determine which record has the latest transcriptions
+                if ($this->latestTranscriptionService) {
+                    $latestMatch = $this->latestTranscriptionService->getLatestMatchedTranscriptionForGloss($formMetadata['glos']);
+                    
+                    if ($latestMatch) {
+                        // The LatestTranscriptionService tells us which record (form_data or nmm_data) has the latest transcriptions
+                        if ($latestMatch['source']['type'] === 'form_data' && $latestMatch['source']['id'] == $id) {
+                            // This form_data record has the latest transcriptions, keep it
                             $resolvedData['hasVideos'] = true;
-                            $resolvedData['source'] = 'nmm_data';
-                            $this->response['debug']['resolved_to_nmm'] = [
-                                'nmm_id' => $nmm['id'],
-                                'glos' => $nmm['glos']
+                            $resolvedData['source'] = 'form_data';
+                            $this->response['debug']['resolved_to_form_data'] = [
+                                'form_data_id' => $id,
+                                'glos' => $formMetadata['glos'],
+                                'matched_transcription_id' => $latestMatch['transcription']['id']
                             ];
-                            break; // Use first nmm_data with videos
+                        } else {
+                            // Another record (possibly nmm_data) has the latest transcriptions
+                            if ($latestMatch['source']['type'] === 'nmm_data') {
+                                $resolvedData['resolvedId'] = $latestMatch['source']['id'];
+                                $resolvedData['resolvedType'] = 'nmm';
+                                $resolvedData['hasVideos'] = true;
+                                $resolvedData['source'] = 'nmm_data';
+                                $this->response['debug']['resolved_to_nmm_by_latest_transcription'] = [
+                                    'nmm_id' => $latestMatch['source']['id'],
+                                    'matched_transcription_id' => $latestMatch['transcription']['id']
+                                ];
+                            }
                         }
+                    } else {
+                        // No latest transcriptions found, fall back to checking basic videos
+                        $resolvedData['hasVideos'] = $this->hasMatchedTranscriptions($id, ['glos', 'extern', 'labels']);
                     }
+                } else {
+                    // Fall back to old logic if LatestTranscriptionService not available
+                    $resolvedData['hasVideos'] = $this->hasMatchedTranscriptions($id, ['glos', 'extern', 'labels']);
                 }
             }
         }
         
-        // For nmm type, check if it has videos
+        // For nmm type, use LatestTranscriptionService if available
         if ($type === 'nmm') {
-            $resolvedData['hasVideos'] = $this->hasMatchedTranscriptions($id, ['nmm', 'glos']);
+            $nmmMetadata = $this->getNmmMetadata($id);
+            
+            if ($nmmMetadata && !empty($nmmMetadata['glos']) && $this->latestTranscriptionService) {
+                $latestMatch = $this->latestTranscriptionService->getLatestMatchedTranscriptionForGloss($nmmMetadata['glos']);
+                
+                if ($latestMatch && $latestMatch['source']['type'] === 'form_data') {
+                    // A form_data record has the latest transcriptions, resolve to it instead
+                    $resolvedData['resolvedId'] = $latestMatch['source']['id'];
+                    $resolvedData['resolvedType'] = 'glos';
+                    $resolvedData['hasVideos'] = true;
+                    $resolvedData['source'] = 'form_data';
+                    $this->response['debug']['resolved_nmm_to_form_data'] = [
+                        'form_data_id' => $latestMatch['source']['id'],
+                        'matched_transcription_id' => $latestMatch['transcription']['id']
+                    ];
+                } else {
+                    // This nmm record has the latest (or only) transcriptions
+                    $resolvedData['hasVideos'] = $this->hasMatchedTranscriptions($id, ['nmm', 'glos']);
+                }
+            } else {
+                // Fall back to basic check
+                $resolvedData['hasVideos'] = $this->hasMatchedTranscriptions($id, ['nmm', 'glos']);
+            }
         }
         
         return $resolvedData;

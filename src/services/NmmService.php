@@ -6,17 +6,20 @@ class NmmService
 {
     private $conn;
     private $response;
+    private $latestTranscriptionService;
     
     /**
      * Constructor
      * 
      * @param mysqli $conn Database connection
      * @param array $response Reference to response array
+     * @param LatestTranscriptionService $latestTranscriptionService Latest transcription service
      */
-    public function __construct($conn, &$response)
+    public function __construct($conn, &$response, $latestTranscriptionService = null)
     {
         $this->conn = $conn;
         $this->response = &$response;
+        $this->latestTranscriptionService = $latestTranscriptionService;
     }
     
     /**
@@ -50,25 +53,35 @@ class NmmService
         
         $nmm = $nmmResult->fetch_assoc();
         
-        // Fetch videos from 'nmm' source
-        $videosNMM = $this->_fetchLastVideoSet((string)$id, "zOg LIKE '%nmm%'");
-        $this->response['debug']['videos_nmm_source_id_' . $id] = $videosNMM;
+        // Use LatestTranscriptionService if available, otherwise fall back to old method
+        if ($this->latestTranscriptionService && !empty($nmm['glos'])) {
+            $latestVideoData = $this->latestTranscriptionService->getLatestVideosForGloss($nmm['glos']);
+            $finalVideos = [
+                'videoLeft'   => $latestVideoData['videos']['videoLeft'],
+                'videoCenter' => $latestVideoData['videos']['videoCenter'],
+                'videoRight'  => $latestVideoData['videos']['videoRight'],
+            ];
+            $this->response['debug']['nmm_latest_service_used_for_id_' . $id] = [
+                'gloss' => $nmm['glos'],
+                'source' => $latestVideoData['source'],
+                'matched_transcription_id' => $latestVideoData['matched_transcription_id']
+            ];
+        } else {
+            // Fall back to old method
+            $videosNMM = $this->_fetchLastVideoSet((string)$id, "zOg LIKE '%nmm%'");
+            $this->response['debug']['videos_nmm_source_id_' . $id] = $videosNMM;
 
-        // Fetch videos from 'extern' source
-        $videosExtern = $this->_fetchLastVideoSet((string)$id, "zOg = 'extern'");
-        $this->response['debug']['videos_extern_source_id_' . $id] = $videosExtern;
+            $videosExtern = $this->_fetchLastVideoSet((string)$id, "zOg = 'extern'");
+            $this->response['debug']['videos_extern_source_id_' . $id] = $videosExtern;
 
-        // Combine videos, prioritizing 'nmm' source, then 'extern' for each slot
-        $finalVideos = [
-            'videoLeft'   => $videosNMM['videoLeft']   ?? $videosExtern['videoLeft']   ?? null,
-            'videoCenter' => $videosNMM['videoCenter'] ?? $videosExtern['videoCenter'] ?? null,
-            'videoRight'  => $videosNMM['videoRight']  ?? $videosExtern['videoRight']  ?? null,
-        ];
-
-        // Debug which source was effectively used for each video
-        $this->response['debug']['final_video_source_left_id_' . $id] = $videosNMM['videoLeft'] ? 'nmm' : ($videosExtern['videoLeft'] ? 'extern' : 'none');
-        $this->response['debug']['final_video_source_center_id_' . $id] = $videosNMM['videoCenter'] ? 'nmm' : ($videosExtern['videoCenter'] ? 'extern' : 'none');
-        $this->response['debug']['final_video_source_right_id_' . $id] = $videosNMM['videoRight'] ? 'nmm' : ($videosExtern['videoRight'] ? 'extern' : 'none');
+            $finalVideos = [
+                'videoLeft'   => $videosNMM['videoLeft']   ?? $videosExtern['videoLeft']   ?? null,
+                'videoCenter' => $videosNMM['videoCenter'] ?? $videosExtern['videoCenter'] ?? null,
+                'videoRight'  => $videosNMM['videoRight']  ?? $videosExtern['videoRight']  ?? null,
+            ];
+            
+            $this->response['debug']['nmm_fallback_method_used_for_id_' . $id] = true;
+        }
         
         $nmm['videos'] = $finalVideos;
         return $nmm;
@@ -110,25 +123,35 @@ class NmmService
                 $nmmId = $nmmRow['id']; // This is nmm_data.id
                 $nmmRecord = $nmmRow;
                 
-                // Fetch videos from 'nmm' source
-                $videosNMM = $this->_fetchLastVideoSet((string)$nmmId, "zOg LIKE '%nmm%'");
-                $this->response['debug']['videos_nmm_source_nmmid_' . $nmmId] = $videosNMM;
+                // Use LatestTranscriptionService if available, otherwise fall back to old method
+                if ($this->latestTranscriptionService && !empty($nmmRow['glos'])) {
+                    $latestVideoData = $this->latestTranscriptionService->getLatestVideosForGloss($nmmRow['glos']);
+                    $finalVideos = [
+                        'videoLeft'   => $latestVideoData['videos']['videoLeft'],
+                        'videoCenter' => $latestVideoData['videos']['videoCenter'],
+                        'videoRight'  => $latestVideoData['videos']['videoRight'],
+                    ];
+                    $this->response['debug']['nmm_signbank_latest_service_used_for_id_' . $nmmId] = [
+                        'gloss' => $nmmRow['glos'],
+                        'source' => $latestVideoData['source'],
+                        'matched_transcription_id' => $latestVideoData['matched_transcription_id']
+                    ];
+                } else {
+                    // Fall back to old method
+                    $videosNMM = $this->_fetchLastVideoSet((string)$nmmId, "zOg LIKE '%nmm%'");
+                    $this->response['debug']['videos_nmm_source_nmmid_' . $nmmId] = $videosNMM;
 
-                // Fetch videos from 'extern' source
-                $videosExtern = $this->_fetchLastVideoSet((string)$nmmId, "zOg = 'extern'");
-                $this->response['debug']['videos_extern_source_nmmid_' . $nmmId] = $videosExtern;
+                    $videosExtern = $this->_fetchLastVideoSet((string)$nmmId, "zOg = 'extern'");
+                    $this->response['debug']['videos_extern_source_nmmid_' . $nmmId] = $videosExtern;
 
-                // Combine videos, prioritizing 'nmm' source, then 'extern' for each slot
-                $finalVideos = [
-                    'videoLeft'   => $videosNMM['videoLeft']   ?? $videosExtern['videoLeft']   ?? null,
-                    'videoCenter' => $videosNMM['videoCenter'] ?? $videosExtern['videoCenter'] ?? null,
-                    'videoRight'  => $videosNMM['videoRight']  ?? $videosExtern['videoRight']  ?? null,
-                ];
-
-                // Debug which source was effectively used for each video
-                $this->response['debug']['final_video_source_left_nmmid_' . $nmmId] = $videosNMM['videoLeft'] ? 'nmm' : ($videosExtern['videoLeft'] ? 'extern' : 'none');
-                $this->response['debug']['final_video_source_center_nmmid_' . $nmmId] = $videosNMM['videoCenter'] ? 'nmm' : ($videosExtern['videoCenter'] ? 'extern' : 'none');
-                $this->response['debug']['final_video_source_right_nmmid_' . $nmmId] = $videosNMM['videoRight'] ? 'nmm' : ($videosExtern['videoRight'] ? 'extern' : 'none');
+                    $finalVideos = [
+                        'videoLeft'   => $videosNMM['videoLeft']   ?? $videosExtern['videoLeft']   ?? null,
+                        'videoCenter' => $videosNMM['videoCenter'] ?? $videosExtern['videoCenter'] ?? null,
+                        'videoRight'  => $videosNMM['videoRight']  ?? $videosExtern['videoRight']  ?? null,
+                    ];
+                    
+                    $this->response['debug']['nmm_signbank_fallback_method_used_for_id_' . $nmmId] = true;
+                }
                 
                 $nmmRecord['videos'] = $finalVideos;
                 $nmmData[] = $nmmRecord;
@@ -189,25 +212,35 @@ class NmmService
                 
                 // Note: app_ready check has been disabled as requested
                 
-                // Fetch videos from 'nmm' source
-                $videosNMM = $this->_fetchLastVideoSet((string)$nmmId, "zOg LIKE '%nmm%'");
-                $this->response['debug']['videos_nmm_source_search_nmmid_' . $nmmId] = $videosNMM;
+                // Use LatestTranscriptionService if available, otherwise fall back to old method
+                if ($this->latestTranscriptionService && !empty($nmmRow['glos'])) {
+                    $latestVideoData = $this->latestTranscriptionService->getLatestVideosForGloss($nmmRow['glos']);
+                    $finalVideos = [
+                        'videoLeft'   => $latestVideoData['videos']['videoLeft'],
+                        'videoCenter' => $latestVideoData['videos']['videoCenter'],
+                        'videoRight'  => $latestVideoData['videos']['videoRight'],
+                    ];
+                    $this->response['debug']['nmm_search_latest_service_used_for_id_' . $nmmId] = [
+                        'gloss' => $nmmRow['glos'],
+                        'source' => $latestVideoData['source'],
+                        'matched_transcription_id' => $latestVideoData['matched_transcription_id']
+                    ];
+                } else {
+                    // Fall back to old method
+                    $videosNMM = $this->_fetchLastVideoSet((string)$nmmId, "zOg LIKE '%nmm%'");
+                    $this->response['debug']['videos_nmm_source_search_nmmid_' . $nmmId] = $videosNMM;
 
-                // Fetch videos from 'extern' source
-                $videosExtern = $this->_fetchLastVideoSet((string)$nmmId, "zOg = 'extern'");
-                $this->response['debug']['videos_extern_source_search_nmmid_' . $nmmId] = $videosExtern;
+                    $videosExtern = $this->_fetchLastVideoSet((string)$nmmId, "zOg = 'extern'");
+                    $this->response['debug']['videos_extern_source_search_nmmid_' . $nmmId] = $videosExtern;
 
-                // Combine videos, prioritizing 'nmm' source, then 'extern' for each slot
-                $finalVideos = [
-                    'videoLeft'   => $videosNMM['videoLeft']   ?? $videosExtern['videoLeft']   ?? null,
-                    'videoCenter' => $videosNMM['videoCenter'] ?? $videosExtern['videoCenter'] ?? null,
-                    'videoRight'  => $videosNMM['videoRight']  ?? $videosExtern['videoRight']  ?? null,
-                ];
-                
-                // Debug which source was effectively used for each video
-                $this->response['debug']['final_video_source_left_search_nmmid_' . $nmmId] = $videosNMM['videoLeft'] ? 'nmm' : ($videosExtern['videoLeft'] ? 'extern' : 'none');
-                $this->response['debug']['final_video_source_center_search_nmmid_' . $nmmId] = $videosNMM['videoCenter'] ? 'nmm' : ($videosExtern['videoCenter'] ? 'extern' : 'none');
-                $this->response['debug']['final_video_source_right_search_nmmid_' . $nmmId] = $videosNMM['videoRight'] ? 'nmm' : ($videosExtern['videoRight'] ? 'extern' : 'none');
+                    $finalVideos = [
+                        'videoLeft'   => $videosNMM['videoLeft']   ?? $videosExtern['videoLeft']   ?? null,
+                        'videoCenter' => $videosNMM['videoCenter'] ?? $videosExtern['videoCenter'] ?? null,
+                        'videoRight'  => $videosNMM['videoRight']  ?? $videosExtern['videoRight']  ?? null,
+                    ];
+                    
+                    $this->response['debug']['nmm_search_fallback_method_used_for_id_' . $nmmId] = true;
+                }
                                 
                 $nmmRecord['videos'] = $finalVideos;
                 $nmmData[] = $nmmRecord;

@@ -9,6 +9,7 @@ require_once 'src/services/SentenceService.php';
 require_once 'src/services/FormService.php';
 require_once 'src/services/SignbankService.php';
 require_once 'src/services/NmmService.php';
+require_once 'src/services/LatestTranscriptionService.php';
 
 // Set security headers
 SecurityHeaders::setHeaders();
@@ -44,9 +45,10 @@ try {
     // Initialize services
     $logger = new ApiLogger($conn);
     $videoService = new VideoService($conn, $response, $logger); // Pass logger to VideoService
-    $nmmService = new NmmService($conn, $response);
+    $latestTranscriptionService = new LatestTranscriptionService($conn, $response);
+    $nmmService = new NmmService($conn, $response, $latestTranscriptionService);
     $sentenceService = new SentenceService($conn, $response, $videoService);
-    $formService = new FormService($conn, $response, $videoService, $nmmService);
+    $formService = new FormService($conn, $response, $videoService, $nmmService, $latestTranscriptionService);
     $signbankService = new SignbankService($conn, $response);
 
     // Get ID from query parameters

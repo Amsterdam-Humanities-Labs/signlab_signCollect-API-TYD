@@ -8,6 +8,7 @@ class FormService
     private $response;
     private $videoService;
     private $nmmService;
+    private $latestTranscriptionService;
     
     /**
      * Constructor
@@ -16,13 +17,25 @@ class FormService
      * @param array $response Reference to response array
      * @param VideoService $videoService Video service
      * @param NmmService $nmmService NMM service
+     * @param LatestTranscriptionService $latestTranscriptionService Latest transcription service
      */
-    public function __construct($conn, &$response, $videoService, $nmmService)
+    public function __construct($conn, &$response, $videoService, $nmmService, $latestTranscriptionService = null)
     {
         $this->conn = $conn;
         $this->response = &$response;
         $this->videoService = $videoService;
         $this->nmmService = $nmmService;
+        $this->latestTranscriptionService = $latestTranscriptionService;
+    }
+    
+    /**
+     * Get the LatestTranscriptionService instance
+     * 
+     * @return LatestTranscriptionService|null
+     */
+    public function getLatestTranscriptionService()
+    {
+        return $this->latestTranscriptionService;
     }
     
     /**
@@ -70,47 +83,69 @@ class FormService
                 $formId = $formRow['id'];
                 $formRecord = $formRow;
                 
-                // Check if this form has app_ready = 1 in matched_transcriptions
-                $hasAppReady = false;
-                $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg IN ('glos', 'extern', 'labels') AND app_ready = 1 AND added = '1' LIMIT 1");
-                if ($checkStmt) {
-                    $checkStmt->bind_param("i", $formId);
-                    if ($checkStmt->execute()) {
-                        $checkResult = $checkStmt->get_result();
-                        $hasAppReady = $checkResult->num_rows > 0;
-                    }
-                    $checkStmt->close();
-                }
+                // Note: app_ready filtering has been disabled for ZIN Project endpoints
+                // to support comprehensive annotation workflows
                 
-                // Skip this form if no app_ready videos
-                if (!$hasAppReady) {
-                    continue;
+                // Use LatestTranscriptionService if available, otherwise fall back to old method
+                if ($this->latestTranscriptionService && !empty($formRow['glos'])) {
+                    $latestVideoData = $this->latestTranscriptionService->getLatestVideosForGloss($formRow['glos']);
+                    $finalVideos = [
+                        'videoLeft'   => $latestVideoData['videos']['videoLeft'],
+                        'videoCenter' => $latestVideoData['videos']['videoCenter'],
+                        'videoRight'  => $latestVideoData['videos']['videoRight'],
+                    ];
+                    $this->response['debug']['form_search_latest_service_used_for_id_' . $formId] = [
+                        'gloss' => $formRow['glos'],
+                        'source' => $latestVideoData['source'],
+                        'matched_transcription_id' => $latestVideoData['matched_transcription_id']
+                    ];
+                } else {
+                    // Fall back to old method
+                    $videosExtern = $this->_fetchLastVideoSet((string)$formId, "zOg = 'extern'");
+                    $this->response['debug']['videos_extern_source_formid_' . $formId] = $videosExtern;
+
+                    $videosLabels = $this->_fetchLastVideoSet((string)$formId, "zOg = 'labels'");
+                    $this->response['debug']['videos_labels_source_formid_' . $formId] = $videosLabels;
+
+                    $finalVideos = [
+                        'videoLeft'   => $videosExtern['videoLeft']   ?? $videosLabels['videoLeft']   ?? null,
+                        'videoCenter' => $videosExtern['videoCenter'] ?? $videosLabels['videoCenter'] ?? null,
+                        'videoRight'  => $videosExtern['videoRight']  ?? $videosLabels['videoRight']  ?? null,
+                    ];
+                    
+                    $this->response['debug']['form_search_fallback_method_used_for_id_' . $formId] = true;
                 }
-                
-                // Fetch videos from 'extern' source (for FormService)
-                $videosExtern = $this->_fetchLastVideoSet((string)$formId, "zOg = 'extern'");
-                $this->response['debug']['videos_extern_source_formid_' . $formId] = $videosExtern;
-
-                // Fetch videos from 'labels' source (for FormService) 
-                $videosLabels = $this->_fetchLastVideoSet((string)$formId, "zOg = 'labels'");
-                $this->response['debug']['videos_labels_source_formid_' . $formId] = $videosLabels;
-
-                // Combine videos, prioritizing 'extern' source, then 'labels' for each slot
-                $finalVideos = [
-                    'videoLeft'   => $videosExtern['videoLeft']   ?? $videosLabels['videoLeft']   ?? null,
-                    'videoCenter' => $videosExtern['videoCenter'] ?? $videosLabels['videoCenter'] ?? null,
-                    'videoRight'  => $videosExtern['videoRight']  ?? $videosLabels['videoRight']  ?? null,
-                ];
-
-                // Debug which source was effectively used for each video
-                $this->response['debug']['final_video_source_left_formid_' . $formId] = $videosExtern['videoLeft'] ? 'extern' : ($videosLabels['videoLeft'] ? 'labels' : 'none');
-                $this->response['debug']['final_video_source_center_formid_' . $formId] = $videosExtern['videoCenter'] ? 'extern' : ($videosLabels['videoCenter'] ? 'labels' : 'none');
-                $this->response['debug']['final_video_source_right_formid_' . $formId] = $videosExtern['videoRight'] ? 'extern' : ($videosLabels['videoRight'] ? 'labels' : 'none');
                 
                 // Check if it has signbank_id, then fetch NMM data as well
                 $nmm_data = [];
                 if (!empty($formRecord['signbank'])) {
                     $nmm_data = $this->nmmService->getNmmDataForSignbankId($formRecord['signbank']);
+                    
+                    // If this form_data record has the latest matched_transcriptions for its gloss,
+                    // replace NMM records with this form_data record in the nmm_data array
+                    if ($this->latestTranscriptionService && !empty($formRow['glos'])) {
+                        $latestMatch = $this->latestTranscriptionService->getLatestMatchedTranscriptionForGloss($formRow['glos']);
+                        if ($latestMatch && $latestMatch['source']['type'] === 'form_data' && $latestMatch['source']['id'] == $formId) {
+                            // This form_data record has the latest transcription, so include it in nmm_data
+                            $formAsNmmData = [
+                                'id' => $formId,
+                                'signbank_id' => $formRecord['signbank'],
+                                'glos' => $formRow['glos'],
+                                'zelfopname' => '', // form_data doesn't have zelfopname
+                                'type' => 'form_data', // Mark as form_data source
+                                'thema' => $formRecord['thema'],
+                                'videos' => $finalVideos
+                            ];
+                            
+                            // Replace nmm_data array with this form_data record since it has the latest transcription
+                            $nmm_data = [$formAsNmmData];
+                            
+                            $this->response['debug']['replaced_nmm_data_with_form_data_for_id_' . $formId] = [
+                                'reason' => 'form_data has latest matched_transcription',
+                                'matched_transcription_id' => $latestMatch['transcription']['id']
+                            ];
+                        }
+                    }
                 }
                 
                 $formRecord['videos'] = $finalVideos;
@@ -153,8 +188,24 @@ class FormService
         
         $form = $formResult->fetch_assoc();
         
-        // Fetch videos
-        $form['videos'] = $this->videoService->getVideosForEntity($id, 'glos');
+        // Use LatestTranscriptionService if available, otherwise fall back to VideoService
+        if ($this->latestTranscriptionService && !empty($form['glos'])) {
+            $latestVideoData = $this->latestTranscriptionService->getLatestVideosForGloss($form['glos']);
+            $form['videos'] = [
+                'videoLeft'   => $latestVideoData['videos']['videoLeft'],
+                'videoCenter' => $latestVideoData['videos']['videoCenter'],
+                'videoRight'  => $latestVideoData['videos']['videoRight'],
+            ];
+            $this->response['debug']['form_by_id_latest_service_used_for_id_' . $id] = [
+                'gloss' => $form['glos'],
+                'source' => $latestVideoData['source'],
+                'matched_transcription_id' => $latestVideoData['matched_transcription_id']
+            ];
+        } else {
+            // Fall back to VideoService
+            $form['videos'] = $this->videoService->getVideosForEntity($id, 'glos');
+            $this->response['debug']['form_by_id_fallback_method_used_for_id_' . $id] = true;
+        }
         
         // Check if it has signbank_id, then fetch NMM data as well
         $nmm_data = [];
@@ -208,7 +259,7 @@ class FormService
         }
 
         $sql = "SELECT l_file, m_file, r_file FROM matched_transcriptions 
-                WHERE m_transcription = ? AND " . $zOgCondition . " AND app_ready = 1 AND added = '1'";
+                WHERE m_transcription = ? AND " . $zOgCondition . " AND added = '1'";
 
         $stmt = $this->conn->prepare($sql);
         if ($stmt) {

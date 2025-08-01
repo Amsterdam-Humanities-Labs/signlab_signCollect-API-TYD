@@ -390,7 +390,123 @@ class SentenceService
     }
     
     /**
-     * Get video data from glosses via form_data matched_transcriptions, with NMM fallback
+     * Get the latest matched_transcriptions entry for a gloss
+     * Searches both form_data and nmm_data sources and returns the most recent one
+     * 
+     * @param string $gloss The gloss to search for
+     * @return array|null Latest matched transcription data with source info
+     */
+    private function getLatestMatchedTranscriptionForGloss($gloss)
+    {
+        // First, get form_data IDs for this gloss (wildcard search)
+        $formDataIds = [];
+        $sql = "SELECT id FROM form_data 
+                WHERE glos LIKE ?
+                AND extern = '1' 
+                AND glosZichtbaar = '0'";
+        
+        $stmt = $this->conn->prepare($sql);
+        if ($stmt) {
+            $glossPattern = '%' . $gloss . '%';
+            $stmt->bind_param("s", $glossPattern);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            while ($row = $result->fetch_assoc()) {
+                $formDataIds[] = $row['id'];
+            }
+            $stmt->close();
+        }
+        
+        // Get nmm_data IDs for this gloss (wildcard search)
+        $nmmDataIds = [];
+        $sql = "SELECT id FROM nmm_data WHERE glos LIKE ?";
+        
+        $stmt = $this->conn->prepare($sql);
+        if ($stmt) {
+            $stmt->bind_param("s", $glossPattern);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            while ($row = $result->fetch_assoc()) {
+                $nmmDataIds[] = $row['id'];
+            }
+            $stmt->close();
+        }
+        
+        // Now find the latest matched_transcriptions entry
+        $latestTranscription = null;
+        $sourceInfo = null;
+        
+        // Check form_data matched_transcriptions
+        if (!empty($formDataIds)) {
+            $placeholders = str_repeat('?,', count($formDataIds) - 1) . '?';
+            $sql = "SELECT mt.*, 'form_data' as source_type, mt.m_transcription as source_id
+                    FROM matched_transcriptions mt
+                    WHERE mt.m_transcription IN ($placeholders)
+                    AND mt.zOg IN ('glos', 'extern', 'labels')
+                    AND mt.added = '1'
+                    ORDER BY mt.id DESC
+                    LIMIT 1";
+            
+            $stmt = $this->conn->prepare($sql);
+            if ($stmt) {
+                $types = str_repeat('i', count($formDataIds));
+                $stmt->bind_param($types, ...$formDataIds);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                if ($row = $result->fetch_assoc()) {
+                    $latestTranscription = $row;
+                    $sourceInfo = [
+                        'type' => 'form_data',
+                        'id' => $row['source_id']
+                    ];
+                }
+                $stmt->close();
+            }
+        }
+        
+        // Check nmm_data matched_transcriptions (only zOg = 'nmm')
+        if (!empty($nmmDataIds)) {
+            $placeholders = str_repeat('?,', count($nmmDataIds) - 1) . '?';
+            $sql = "SELECT mt.*, 'nmm_data' as source_type, mt.m_transcription as source_id
+                    FROM matched_transcriptions mt
+                    WHERE mt.m_transcription IN ($placeholders)
+                    AND mt.zOg = 'nmm'
+                    AND mt.added = '1'
+                    ORDER BY mt.id DESC
+                    LIMIT 1";
+            
+            $stmt = $this->conn->prepare($sql);
+            if ($stmt) {
+                $types = str_repeat('i', count($nmmDataIds));
+                $stmt->bind_param($types, ...$nmmDataIds);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                if ($row = $result->fetch_assoc()) {
+                    // Compare with existing latest transcription
+                    if (!$latestTranscription || $row['id'] > $latestTranscription['id']) {
+                        $latestTranscription = $row;
+                        $sourceInfo = [
+                            'type' => 'nmm_data',
+                            'id' => $row['source_id']
+                        ];
+                    }
+                }
+                $stmt->close();
+            }
+        }
+        
+        if ($latestTranscription && $sourceInfo) {
+            return [
+                'transcription' => $latestTranscription,
+                'source' => $sourceInfo
+            ];
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Get video data from glosses using the latest matched_transcriptions
      * 
      * @param array $glosses Array of gloss strings
      * @param string $baseUrl Base URL for media files
@@ -414,77 +530,57 @@ class SentenceService
                 'dataSource' => null
             ];
             
-            // First try to find videos via form_data (use exact match for sentence gloss lookup)
-            $formId = $this->getFormDataIdByGlos($gloss, true);
-            if ($formId) {
-                $allFormDataIds[] = $formId;
-                $glossData['formDataId'] = $formId;
-                
-                // Get matched_transcriptions for this form_data ID
-                $transcriptionData = $this->getMatchedTranscriptionsByFormId($formId);
-                if ($transcriptionData) {
-                    $glossData['dataSource'] = 'form_data';
-                    $hasFormData = true;
-                    
-                    // Process left video
-                    if (!empty($transcriptionData['l_file'])) {
-                        $videoFile = preg_replace('/\.wav$/i', '.mp4', $transcriptionData['l_file']);
-                        $thumbnailFile = preg_replace('/\.wav$/i', '.jpg', $transcriptionData['l_file']);
-                        $glossData['videos']['left'] = $baseUrl . $videoFile;
-                        $glossData['thumbnails']['left'] = $baseUrl . $thumbnailFile;
-                    }
-                    
-                    // Process center video
-                    if (!empty($transcriptionData['m_file'])) {
-                        $videoFile = preg_replace('/\.wav$/i', '.mp4', $transcriptionData['m_file']);
-                        $thumbnailFile = preg_replace('/\.wav$/i', '.jpg', $transcriptionData['m_file']);
-                        $glossData['videos']['center'] = $baseUrl . $videoFile;
-                        $glossData['thumbnails']['center'] = $baseUrl . $thumbnailFile;
-                    }
-                    
-                    // Process right video
-                    if (!empty($transcriptionData['r_file'])) {
-                        $videoFile = preg_replace('/\.wav$/i', '.mp4', $transcriptionData['r_file']);
-                        $thumbnailFile = preg_replace('/\.wav$/i', '.jpg', $transcriptionData['r_file']);
-                        $glossData['videos']['right'] = $baseUrl . $videoFile;
-                        $glossData['thumbnails']['right'] = $baseUrl . $thumbnailFile;
-                    }
-                }
-            }
+            // Get the latest matched_transcriptions for this gloss
+            $latestMatch = $this->getLatestMatchedTranscriptionForGloss($gloss);
             
-            // If no videos found via form_data for this gloss, try NMM data as fallback
-            if (empty($glossData['videos'])) {
-                $this->response['debug']['trying_nmm_fallback_for_gloss'] = $gloss;
+            if ($latestMatch) {
+                $transcriptionData = $latestMatch['transcription'];
+                $sourceInfo = $latestMatch['source'];
                 
-                // Create NmmService instance
-                $nmmService = new NmmService($this->conn, $this->response);
-                $nmmResults = $nmmService->searchNmmByGlos($gloss, 1, true); // Limit to 1 result, use exact match
-                
-                if (!empty($nmmResults)) {
-                    $nmmRecord = $nmmResults[0];
-                    $allNmmIds[] = $nmmRecord['id'];
-                    $glossData['nmmId'] = $nmmRecord['id'];
-                    $glossData['dataSource'] = 'nmm_data';
+                // Set the source information
+                $glossData['dataSource'] = $sourceInfo['type'];
+                if ($sourceInfo['type'] === 'form_data') {
+                    $glossData['formDataId'] = $sourceInfo['id'];
+                    $allFormDataIds[] = $sourceInfo['id'];
+                    $hasFormData = true;
+                } else if ($sourceInfo['type'] === 'nmm_data') {
+                    $glossData['nmmId'] = $sourceInfo['id'];
+                    $allNmmIds[] = $sourceInfo['id'];
                     $hasNmmData = true;
-                    
-                    // Extract videos from NMM record
-                    if (isset($nmmRecord['videos'])) {
-                        if (!empty($nmmRecord['videos']['videoLeft'])) {
-                            $glossData['videos']['left'] = $nmmRecord['videos']['videoLeft'];
-                            $glossData['thumbnails']['left'] = preg_replace('/\.mp4$/i', '.jpg', $nmmRecord['videos']['videoLeft']);
-                        }
-                        
-                        if (!empty($nmmRecord['videos']['videoCenter'])) {
-                            $glossData['videos']['center'] = $nmmRecord['videos']['videoCenter'];
-                            $glossData['thumbnails']['center'] = preg_replace('/\.mp4$/i', '.jpg', $nmmRecord['videos']['videoCenter']);
-                        }
-                        
-                        if (!empty($nmmRecord['videos']['videoRight'])) {
-                            $glossData['videos']['right'] = $nmmRecord['videos']['videoRight'];
-                            $glossData['thumbnails']['right'] = preg_replace('/\.mp4$/i', '.jpg', $nmmRecord['videos']['videoRight']);
-                        }
-                    }
                 }
+                
+                // Process video files
+                // Process left video
+                if (!empty($transcriptionData['l_file'])) {
+                    $videoFile = preg_replace('/\.wav$/i', '.mp4', $transcriptionData['l_file']);
+                    $thumbnailFile = preg_replace('/\.wav$/i', '.jpg', $transcriptionData['l_file']);
+                    $glossData['videos']['left'] = $baseUrl . $videoFile;
+                    $glossData['thumbnails']['left'] = $baseUrl . $thumbnailFile;
+                }
+                
+                // Process center video
+                if (!empty($transcriptionData['m_file'])) {
+                    $videoFile = preg_replace('/\.wav$/i', '.mp4', $transcriptionData['m_file']);
+                    $thumbnailFile = preg_replace('/\.wav$/i', '.jpg', $transcriptionData['m_file']);
+                    $glossData['videos']['center'] = $baseUrl . $videoFile;
+                    $glossData['thumbnails']['center'] = $baseUrl . $thumbnailFile;
+                }
+                
+                // Process right video
+                if (!empty($transcriptionData['r_file'])) {
+                    $videoFile = preg_replace('/\.wav$/i', '.mp4', $transcriptionData['r_file']);
+                    $thumbnailFile = preg_replace('/\.wav$/i', '.jpg', $transcriptionData['r_file']);
+                    $glossData['videos']['right'] = $baseUrl . $videoFile;
+                    $glossData['thumbnails']['right'] = $baseUrl . $thumbnailFile;
+                }
+                
+                $this->response['debug']['gloss_latest_match'][$gloss] = [
+                    'matched_transcription_id' => $transcriptionData['id'],
+                    'source' => $sourceInfo['type'],
+                    'source_id' => $sourceInfo['id']
+                ];
+            } else {
+                $this->response['debug']['gloss_no_match'][] = $gloss;
             }
             
             // Add this gloss data to the collection

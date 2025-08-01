@@ -37,6 +37,7 @@ require_once 'src/services/VideoService.php'; // Add VideoService
 require_once 'src/services/MocapService.php'; // Add MocapService
 require_once 'src/services/NmmService.php';   // Add NmmService
 require_once 'src/services/FormService.php';  // Add FormService
+require_once 'src/services/LatestTranscriptionService.php'; // Add LatestTranscriptionService
 
 // Set security headers
 SecurityHeaders::setHeaders();
@@ -73,8 +74,9 @@ try {
     $logger = new ApiLogger($conn);
     $videoService = new VideoService($conn, $response, $logger);
     $mocapService = new MocapService($conn, $response, $logger);
-    $nmmService = new NmmService($conn, $response); // Instantiate NmmService
-    $formService = new FormService($conn, $response, $videoService, $nmmService); // Instantiate FormService
+    $latestTranscriptionService = new LatestTranscriptionService($conn, $response); // Instantiate LatestTranscriptionService
+    $nmmService = new NmmService($conn, $response, $latestTranscriptionService); // Instantiate NmmService with LatestTranscriptionService
+    $formService = new FormService($conn, $response, $videoService, $nmmService, $latestTranscriptionService); // Instantiate FormService with LatestTranscriptionService
     $searchService = new SearchService($conn, $response, $videoService, $mocapService, $nmmService, $formService); // Pass FormService
     $suggestionService = new SuggestionService($conn, $response);
 

@@ -1,7 +1,7 @@
 <?php
 /**
  * API endpoint to resolve IDs between form_data and nmm_data
- * Priority: nmm_data > form_data when signbank_id exists
+ * Priority: form_data > nmm_data when form_data has latest matched_transcriptions
  */
 
 // Load configuration and service files
@@ -10,6 +10,7 @@ require_once 'src/config/SecurityHeaders.php';
 require_once 'src/config/ErrorReporting.php';
 require_once 'src/services/ApiLogger.php';
 require_once 'src/services/IdResolverService.php';
+require_once 'src/services/LatestTranscriptionService.php';
 
 // Set security headers
 SecurityHeaders::setHeaders();
@@ -44,7 +45,8 @@ try {
 
     // Initialize services
     $logger = new ApiLogger($conn);
-    $idResolver = new IdResolverService($conn, $response);
+    $latestTranscriptionService = new LatestTranscriptionService($conn, $response);
+    $idResolver = new IdResolverService($conn, $response, $latestTranscriptionService);
     
     // Get parameters
     $id = isset($_GET['id']) ? intval($_GET['id']) : null;
