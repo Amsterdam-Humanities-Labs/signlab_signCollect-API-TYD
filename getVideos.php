@@ -85,7 +85,30 @@ try {
             break;
             
         case 'glos':
-            $response['data'] = $formService->getFormById($id);
+            try {
+                $response['data'] = $formService->getFormById($id);
+            } catch (Exception $e) {
+                // If form not found in form_data, try nmm_data as fallback
+                if (strpos($e->getMessage(), 'Form not found') !== false) {
+                    try {
+                        $nmmData = $nmmService->getNmmById($id);
+                        // Format nmm_data response to match form_data structure
+                        $response['data'] = [
+                            "id" => $nmmData['id'],
+                            "senses" => "[]", // nmm_data doesn't have senses, use empty array
+                            "signbank" => $nmmData['signbank_id'] ?? "",
+                            "videos" => $nmmData['videos']
+                        ];
+                        $response['debug']['fallback_to_nmm'] = "Form ID $id not found in form_data, successfully retrieved from nmm_data";
+                    } catch (Exception $nmmException) {
+                        // Neither form_data nor nmm_data has this ID
+                        throw new Exception("ID $id not found in either form_data or nmm_data tables");
+                    }
+                } else {
+                    // Re-throw other exceptions (database errors, etc.)
+                    throw $e;
+                }
+            }
             break;
             
         case 'sb':

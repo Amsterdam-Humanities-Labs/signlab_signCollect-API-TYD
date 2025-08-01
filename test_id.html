@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ID Resolver Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+        .result h2 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .result-item {
+            margin: 10px 0;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        .result-label {
+            font-weight: bold;
+            color: #495057;
+            display: inline-block;
+            width: 150px;
+        }
+        .result-value {
+            color: #212529;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .loading {
+            color: #6c757d;
+            font-style: italic;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ID Resolver Test</h1>
+        
+        <div class="input-group">
+            <label for="idInput">Enter ID:</label>
+            <input type="number" id="idInput" placeholder="e.g., 40879" value="40879">
+        </div>
+        
+        <div class="input-group">
+            <label for="typeSelect">Select Type:</label>
+            <select id="typeSelect">
+                <option value="glos">glos (form_data)</option>
+                <option value="nmm">nmm (nmm_data)</option>
+            </select>
+        </div>
+        
+        <button onclick="resolveIdWrapper()">Resolve ID</button>
+        <button onclick="testExamples()">Test Examples</button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function resolveId(id, type, callback) {
+            // Get values from inputs if not provided
+            const idValue = id || document.getElementById('idInput').value;
+            const typeValue = type || document.getElementById('typeSelect').value;
+            
+            if (!idValue) {
+                showError('Please enter an ID');
+                if (callback) callback(null);
+                return;
+            }
+            
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div class="loading">Loading...</div>';
+            
+            fetch('https://api.signcollect.nl/getResolvedId?id=' + idValue + '&type=' + typeValue)
+                .then(function(response) {
+                    return response.json();
+                })
+                .then(function(data) {
+                    if (data.success) {
+                        displayResult(data.data);
+                        if (callback) {
+                            callback(data.data.resolvedId);
+                        }
+                    } else {
+                        showError(data.errors ? data.errors.join(', ') : 'An error occurred');
+                        if (callback) callback(null);
+                    }
+                })
+                .catch(function(error) {
+                    showError('Network error: ' + error.message);
+                    if (callback) callback(null);
+                });
+        }
+        
+        function resolveIdWrapper() {
+            resolveId(null, null);
+        }
+        
+        function displayResult(data) {
+            const resultDiv = document.getElementById('result');
+            
+            let html = '<div class="result">';
+            html += '<h2>Resolution Result</h2>';
+            
+            // Highlight if ID changed
+            const idChanged = data.originalId !== data.resolvedId;
+            
+            html += `<div class="result-item">
+                <span class="result-label">Original ID:</span>
+                <span class="result-value">${data.originalId} (${data.originalType})</span>
+            </div>`;
+            
+            html += `<div class="result-item">
+                <span class="result-label">Resolved ID:</span>
+                <span class="result-value ${idChanged ? 'highlight' : ''}">${data.resolvedId} (${data.resolvedType})</span>
+            </div>`;
+            
+            if (idChanged) {
+                html += `<div class="result-item">
+                    <span class="result-label">Status:</span>
+                    <span class="result-value highlight">ID changed from ${data.originalType} to ${data.resolvedType}</span>
+                </div>`;
+            }
+            
+            html += `<div class="result-item">
+                <span class="result-label">Signbank ID:</span>
+                <span class="result-value">${data.signbankId || 'None'}</span>
+            </div>`;
+            
+            html += `<div class="result-item">
+                <span class="result-label">Has Videos:</span>
+                <span class="result-value">${data.hasVideos ? 'Yes' : 'No'}</span>
+            </div>`;
+            
+            html += `<div class="result-item">
+                <span class="result-label">Source:</span>
+                <span class="result-value">${data.source}</span>
+            </div>`;
+            
+            if (data.metadata) {
+                html += '<div class="result-item"><span class="result-label">Metadata:</span></div>';
+                html += '<div style="margin-left: 20px;">';
+                for (const [key, value] of Object.entries(data.metadata)) {
+                    html += `<div class="result-item">
+                        <span class="result-label">${key}:</span>
+                        <span class="result-value">${value}</span>
+                    </div>`;
+                }
+                html += '</div>';
+            }
+            
+            html += '</div>';
+            
+            resultDiv.innerHTML = html;
+        }
+        
+        function showError(message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `<div class="error">Error: ${message}</div>`;
+        }
+        
+        function testExamples() {
+            const examples = [
+                { id: 4, type: 'glos', description: 'Form ID with signbank that has nmm_data' },
+                { id: 40879, type: 'glos', description: 'Form ID without signbank' },
+                { id: 58, type: 'nmm', description: 'Direct nmm_data ID' }
+            ];
+            
+            let html = '<div class="result"><h2>Test Results</h2>';
+            let completed = 0;
+            const results = [];
+            
+            // Process each example
+            examples.forEach(function(example, index) {
+                resolveId(example.id, example.type, function(resolvedId) {
+                    results[index] = {
+                        description: example.description,
+                        id: example.id,
+                        type: example.type,
+                        resolvedId: resolvedId
+                    };
+                    
+                    completed++;
+                    
+                    // When all examples are complete, display results
+                    if (completed === examples.length) {
+                        results.forEach(function(result) {
+                            html += '<div class="result-item">' +
+                                '<strong>' + result.description + ':</strong><br>' +
+                                'ID ' + result.id + ' (' + result.type + ') → Resolved to: ' + 
+                                (result.resolvedId || 'Error') +
+                                '</div>';
+                        });
+                        
+                        html += '</div>';
+                        document.getElementById('result').innerHTML = html;
+                    }
+                });
+            });
+        }
+        
+        // Allow Enter key to trigger search
+        document.getElementById('idInput').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                resolveIdWrapper();
+            }
+        });
+    </script>
+</body>
+</html>

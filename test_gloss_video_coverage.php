@@ -176,38 +176,44 @@ try {
         $hasWorkingUrls = false;
         
         // Check form_data first (exact match)
-        $formId = getFormDataIdByGlos($conn, $gloss, true);
-        if ($formId) {
-            $transcriptionData = getMatchedTranscriptionsByFormId($conn, $formId);
-            if ($transcriptionData) {
-                $hasFormData = true;
-                
-                // Optionally validate URLs
-                if ($validateUrls) {
-                    $baseUrl = defined('MEDIA_BASE_URL') ? MEDIA_BASE_URL : 'https://media.signcollect.nl/';
-                    $urls = [];
-                    
-                    if (!empty($transcriptionData['l_file'])) {
-                        $urls[] = $baseUrl . preg_replace('/\.wav$/i', '.mp4', $transcriptionData['l_file']);
-                    }
-                    if (!empty($transcriptionData['m_file'])) {
-                        $urls[] = $baseUrl . preg_replace('/\.wav$/i', '.mp4', $transcriptionData['m_file']);
-                    }
-                    if (!empty($transcriptionData['r_file'])) {
-                        $urls[] = $baseUrl . preg_replace('/\.wav$/i', '.mp4', $transcriptionData['r_file']);
-                    }
-                    
-                    foreach ($urls as $url) {
-                        $urlValidationStats['tested']++;
-                        if (!testUrl($url)) {
-                            $urlValidationStats['failed']++;
-                        } else {
-                            $hasWorkingUrls = true;
-                        }
-                    }
-                } else {
-                    $hasWorkingUrls = true; // Assume working if not validating
+        $formIds = getFormDataIdsByGlos($conn, $gloss, true);
+        if (!empty($formIds)) {
+            // Try each form ID until we find one with transcription data
+            foreach ($formIds as $formId) {
+                $transcriptionData = getMatchedTranscriptionsByFormId($conn, $formId);
+                if ($transcriptionData) {
+                    $hasFormData = true;
+                    break; // Use the first valid result
                 }
+            }
+        }
+        
+        if ($hasFormData) {
+            // Optionally validate URLs
+            if ($validateUrls) {
+                $baseUrl = defined('MEDIA_BASE_URL') ? MEDIA_BASE_URL : 'https://media.signcollect.nl/';
+                $urls = [];
+                
+                if (!empty($transcriptionData['l_file'])) {
+                    $urls[] = $baseUrl . preg_replace('/\.wav$/i', '.mp4', $transcriptionData['l_file']);
+                }
+                if (!empty($transcriptionData['m_file'])) {
+                    $urls[] = $baseUrl . preg_replace('/\.wav$/i', '.mp4', $transcriptionData['m_file']);
+                }
+                if (!empty($transcriptionData['r_file'])) {
+                    $urls[] = $baseUrl . preg_replace('/\.wav$/i', '.mp4', $transcriptionData['r_file']);
+                }
+                
+                foreach ($urls as $url) {
+                    $urlValidationStats['tested']++;
+                    if (!testUrl($url)) {
+                        $urlValidationStats['failed']++;
+                    } else {
+                        $hasWorkingUrls = true;
+                    }
+                }
+            } else {
+                $hasWorkingUrls = true; // Assume working if not validating
             }
         }
         
@@ -419,36 +425,39 @@ function testUrl($url) {
 /**
  * Get form_data ID by glos value with exact matching
  */
-function getFormDataIdByGlos($conn, $glos, $exactMatch = true) {
+function getFormDataIdsByGlos($conn, $glos, $exactMatch = true) {
     if ($exactMatch) {
-        $sql = "SELECT id FROM form_data WHERE glos = ? AND extern = '1' AND glosZichtbaar = '0' LIMIT 1";
+        $sql = "SELECT id FROM form_data WHERE glos = ? AND extern = '1' AND glosZichtbaar = '0'";
         $searchValue = $glos;
     } else {
-        $sql = "SELECT id FROM form_data WHERE glos LIKE ? AND extern = '1' AND glosZichtbaar = '0' LIMIT 1";
+        $sql = "SELECT id FROM form_data WHERE glos LIKE ? AND extern = '1' AND glosZichtbaar = '0'";
         $searchValue = $glos . '%';
     }
     
     $stmt = $conn->prepare($sql);
     if (!$stmt) {
-        return null;
+        return [];
     }
     
     $stmt->bind_param("s", $searchValue);
     
     if (!$stmt->execute()) {
         $stmt->close();
-        return null;
+        return [];
     }
     
     $result = $stmt->get_result();
     $stmt->close();
     
     if ($result->num_rows === 0) {
-        return null;
+        return [];
     }
     
-    $row = $result->fetch_assoc();
-    return $row['id'];
+    $ids = [];
+    while ($row = $result->fetch_assoc()) {
+        $ids[] = $row['id'];
+    }
+    return $ids;
 }
 
 /**
@@ -459,10 +468,9 @@ function getMatchedTranscriptionsByFormId($conn, $formId) {
                    added, app_ready, zOg
             FROM matched_transcriptions 
             WHERE (l_transcription = ? OR m_transcription = ? OR r_transcription = ?) 
-              AND zOg IN ('glos', 'extern') 
+              AND zOg IN ('glos', 'extern', 'labels') 
               AND app_ready = 1
-            ORDER BY id DESC
-            LIMIT 1";
+            ORDER BY id DESC";
     
     $stmt = $conn->prepare($sql);
     if (!$stmt) {

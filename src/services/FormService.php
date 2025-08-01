@@ -162,13 +162,31 @@ class FormService
             $nmm_data = $this->nmmService->getNmmDataForSignbankId($form['signbank']);
         }
         
+        // If main videos are empty/null, try to use videos from nmm_data
+        $finalVideos = $form['videos'];
+        if (!empty($nmm_data) && is_array($nmm_data)) {
+            foreach ($nmm_data as $nmmRecord) {
+                if (!empty($nmmRecord['videos'])) {
+                    // Replace null videos with nmm videos
+                    if (empty($finalVideos['videoLeft']) && !empty($nmmRecord['videos']['videoLeft'])) {
+                        $finalVideos['videoLeft'] = $nmmRecord['videos']['videoLeft'];
+                    }
+                    if (empty($finalVideos['videoCenter']) && !empty($nmmRecord['videos']['videoCenter'])) {
+                        $finalVideos['videoCenter'] = $nmmRecord['videos']['videoCenter'];
+                    }
+                    if (empty($finalVideos['videoRight']) && !empty($nmmRecord['videos']['videoRight'])) {
+                        $finalVideos['videoRight'] = $nmmRecord['videos']['videoRight'];
+                    }
+                }
+            }
+        }
+        
         // Prepare the final response
         return [
             "id" => $form['id'] ?? null,
             "senses" => $form['senses'] ?? "",
             "signbank" => $form['signbank'] ?? "",
-            "videos" => $form['videos'],
-            "nmm_data" => $nmm_data
+            "videos" => $finalVideos
         ];
     }
 

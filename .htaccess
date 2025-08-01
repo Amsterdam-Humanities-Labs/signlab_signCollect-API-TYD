@@ -13,6 +13,7 @@ RewriteCond %{REQUEST_URI} !/getRandomVideo\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/getZinnen\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/getZinnenThemas\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/getZinnenVideos\.php$ [NC]
+RewriteCond %{REQUEST_URI} !/getResolvedId\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/admin/ [NC]
 RewriteCond %{REQUEST_URI} !/submit\.php$ [NC] # If submit.php needs to be directly accessible
 RewriteRule ^(.*)\.php$ /$1 [R=301,L]
@@ -33,6 +34,9 @@ RewriteRule ^thema/(.+)$ getThemeVideos.php?theme=$1 [L,QSA]
 # This rule assumes that suggestions are handled by index.php when a specific POST variable is set.
 # If suggestions have a dedicated endpoint, adjust accordingly.
 RewriteRule ^suggestions$ index.php [L,QSA]
+
+# Route for ID resolver: /getResolvedId
+RewriteRule ^getResolvedId$ getResolvedId.php [L,QSA]
 
 # Standard front controller, if not already handled by specific rules
 # This will pass the request to index.php, which can then parse the path if needed.
