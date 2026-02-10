@@ -67,7 +67,7 @@ class SentenceService
     {
         $sentences = [];
         
-        $sql = "SELECT ID, zinString, thema FROM sentences WHERE thema = ? ORDER BY ID ASC LIMIT ? OFFSET ?";
+        $sql = "SELECT ID, zinStringEAF AS zinString, thema FROM sentences WHERE " . SENTENCE_STATUS_FILTER . " AND thema = ? ORDER BY ID ASC LIMIT ? OFFSET ?";
         
         $stmt = $this->conn->prepare($sql);
         if (!$stmt) {
@@ -106,8 +106,8 @@ class SentenceService
      */
     public function getSentenceById($id)
     {
-        // Fetch sentence data with only existing columns (ID, zinString, thema)
-        $stmt = $this->conn->prepare("SELECT ID, zinString, thema FROM sentences WHERE ID = ?");
+        // Fetch sentence data - only if all statuses are Klaar
+        $stmt = $this->conn->prepare("SELECT ID, zinStringEAF AS zinString, thema FROM sentences WHERE " . SENTENCE_STATUS_FILTER . " AND ID = ?");
         if (!$stmt) {
             $this->response['debug']['sentence_prepare_error'] = $this->conn->error;
             throw new Exception('Prepare statement failed: ' . $this->conn->error);
@@ -148,12 +148,40 @@ class SentenceService
             }
         }
         
-        // Add full URLs for subtitle files
+        // Add full URLs for subtitle files and determine last_modified_srt from SRT file timestamps
         $subtitleFullUrls = [];
+        $eafDir = realpath(__DIR__ . '/../../../eaf/zin/');
+        $lastModifiedSrt = null;
         foreach ($subtitleFiles as $type => $filename) {
             $subtitleFullUrls[$type] = $filename ? SUBTITLE_BASE_URL . $filename : null;
+            if ($filename && $eafDir) {
+                $filePath = $eafDir . '/' . $filename;
+                if (file_exists($filePath)) {
+                    $mtime = filemtime($filePath);
+                    if ($mtime !== false && ($lastModifiedSrt === null || $mtime > $lastModifiedSrt)) {
+                        $lastModifiedSrt = $mtime;
+                    }
+                }
+            }
         }
-        
+
+        // Determine last_modified from mp4 video file timestamps
+        $videoDir = '/web/gebarenoverleg_media/studioFilesMini/post/';
+        $lastModified = null;
+        foreach (['videoLeft', 'videoCenter', 'videoRight'] as $videoKey) {
+            if (!empty($sentence['videos'][$videoKey])) {
+                if (preg_match('/\/([^\/]+\.mp4)$/i', $sentence['videos'][$videoKey], $m)) {
+                    $mp4Path = $videoDir . $m[1];
+                    if (file_exists($mp4Path)) {
+                        $mtime = filemtime($mp4Path);
+                        if ($mtime !== false && ($lastModified === null || $mtime > $lastModified)) {
+                            $lastModified = $mtime;
+                        }
+                    }
+                }
+            }
+        }
+
         // Prepare the final response
         return [
             "id" => $sentence['ID'] ?? null,
@@ -162,7 +190,9 @@ class SentenceService
             "Gebaar_voor_Gebaar" => "", // Providing empty default for non-existent column
             "Signbank_ID_glossen" => "", // Providing empty default for non-existent column
             "videos" => $sentence['videos'],
-            "subtitleFiles" => $subtitleFullUrls
+            "subtitleFiles" => $subtitleFullUrls,
+            "last_modified" => $lastModified ? date('Y-m-d H:i:s', $lastModified) : null,
+            "last_modified_srt" => $lastModifiedSrt ? date('Y-m-d H:i:s', $lastModifiedSrt) : null
         ];
     }
     
@@ -175,7 +205,7 @@ class SentenceService
     public function getVideoDataForSentence($sentenceId)
     {
         // First get the sentence data
-        $stmt = $this->conn->prepare("SELECT ID, zinString, thema, glosses FROM sentences WHERE ID = ?");
+        $stmt = $this->conn->prepare("SELECT ID, zinStringEAF AS zinString, thema, glosses FROM sentences WHERE " . SENTENCE_STATUS_FILTER . " AND ID = ?");
         if (!$stmt) {
             $this->response['debug']['sentence_prepare_error'] = $this->conn->error;
             return null;

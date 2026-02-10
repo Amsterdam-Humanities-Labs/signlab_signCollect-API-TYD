@@ -225,7 +225,7 @@ class SuggestionService
                     $params[] = json_encode("\"$word\"");
                 }
                 
-                $sql = "SELECT ID, zinString, IFNULL(thema, 'Unknown') as thema FROM sentences WHERE " . implode(' AND ', $lemmaConditions) . " LIMIT ?";
+                $sql = "SELECT ID, zinStringEAF AS zinString, IFNULL(thema, 'Unknown') as thema FROM sentences WHERE " . SENTENCE_STATUS_FILTER . " AND " . implode(' AND ', $lemmaConditions) . " LIMIT ?";
                 
                 $stmt = $this->conn->prepare($sql);
                 if ($stmt) {
@@ -239,9 +239,9 @@ class SuggestionService
                         $sentenceResult = $stmt->get_result();
                         
                         while ($sentence = $sentenceResult->fetch_assoc()) {
-                            // Check if sentence has app_ready videos
+                            // Check if sentence has videos
                             $hasMatchedTranscription = false;
-                            $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'zin' AND added = '1' AND app_ready = 1 LIMIT 1");
+                            $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'zin' AND added = '1' LIMIT 1");
                             if ($checkStmt) {
                                 $checkStmt->bind_param("i", $sentence['ID']);
                                 if ($checkStmt->execute()) {
@@ -250,13 +250,13 @@ class SuggestionService
                                 }
                                 $checkStmt->close();
                             }
-                            
+
                             if ($hasMatchedTranscription) {
                                 // Truncate long sentences for suggestions
-                                $truncatedText = strlen($sentence['zinString']) > 60 ? 
-                                    substr($sentence['zinString'], 0, 57) . '...' : 
+                                $truncatedText = strlen($sentence['zinString']) > 60 ?
+                                    substr($sentence['zinString'], 0, 57) . '...' :
                                     $sentence['zinString'];
-                                
+
                                 $sentenceSuggestions[] = [
                                     'text' => $truncatedText,
                                     'full_text' => $sentence['zinString'],
@@ -274,20 +274,20 @@ class SuggestionService
             // Single word query: search using lemma
             $lemmaJson = json_encode($searchQuery);
             $lemmaQuotedJson = json_encode("\"$searchQuery\"");
-            
-            $sql = "SELECT ID, zinString, IFNULL(thema, 'Unknown') as thema FROM sentences WHERE JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?) LIMIT ?";
-            
+
+            $sql = "SELECT ID, zinStringEAF AS zinString, IFNULL(thema, 'Unknown') as thema FROM sentences WHERE " . SENTENCE_STATUS_FILTER . " AND (JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?)) LIMIT ?";
+
             $stmt = $this->conn->prepare($sql);
             if ($stmt) {
                 $stmt->bind_param("ssi", $lemmaJson, $lemmaQuotedJson, $limit);
-                
+
                 if ($stmt->execute()) {
                     $sentenceResult = $stmt->get_result();
-                    
+
                     while ($sentence = $sentenceResult->fetch_assoc()) {
-                        // Check if sentence has app_ready videos
+                        // Check if sentence has videos
                         $hasMatchedTranscription = false;
-                        $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'zin' AND added = '1' AND app_ready = 1 LIMIT 1");
+                        $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'zin' AND added = '1' LIMIT 1");
                         if ($checkStmt) {
                             $checkStmt->bind_param("i", $sentence['ID']);
                             if ($checkStmt->execute()) {

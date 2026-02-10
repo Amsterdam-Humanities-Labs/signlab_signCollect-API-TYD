@@ -570,7 +570,7 @@ class SearchService
                     $params[] = json_encode("\"$word\"");
                 }
                 
-                $sql = "SELECT ID, zinString, IFNULL(thema, 'Unknown') as thema FROM sentences WHERE " . implode(' AND ', $lemmaConditions) . " LIMIT ?, ?";
+                $sql = "SELECT ID, zinStringEAF AS zinString, IFNULL(thema, 'Unknown') as thema FROM sentences WHERE " . SENTENCE_STATUS_FILTER . " AND " . implode(' AND ', $lemmaConditions) . " LIMIT ?, ?";
                 $this->response['debug']['sentences_multi_word_query'] = $sql;
                 
                 $stmt = $this->conn->prepare($sql);
@@ -602,9 +602,9 @@ class SearchService
                     $exists = in_array($sentence['ID'], array_column($sentenceMatches, 'id'));
                     
                     if (!$exists) {
-                        // First check if there's at least one row in matched_transcriptions with matching criteria and app_ready = 1
+                        // Check if there's at least one row in matched_transcriptions with matching criteria
                         $hasMatchedTranscription = false;
-                        $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'zin' AND added = '1' AND app_ready = 1 LIMIT 1");
+                        $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'zin' AND added = '1' LIMIT 1");
                         if ($checkStmt) {
                             $checkStmt->bind_param("i", $sentence['ID']);
                             if ($checkStmt->execute()) {
@@ -613,7 +613,7 @@ class SearchService
                             }
                             $checkStmt->close();
                         }
-                        
+
                         // Only add the sentence if it has a matching transcription
                         if ($hasMatchedTranscription) {
                             // Include thema in the basic sentence info
@@ -638,7 +638,7 @@ class SearchService
             if (!empty($lemmas)) {
                 foreach ($lemmas as $lemma) {
                     // Updated query to include thema field from sentences table
-                    $sql = "SELECT ID, zinString, IFNULL(thema, 'Unknown') as thema FROM sentences WHERE JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?) LIMIT ?, ?";
+                    $sql = "SELECT ID, zinStringEAF AS zinString, IFNULL(thema, 'Unknown') as thema FROM sentences WHERE " . SENTENCE_STATUS_FILTER . " AND (JSON_CONTAINS(lemmaList, ?) OR JSON_CONTAINS(lemmaList, ?)) LIMIT ?, ?";
                     $this->response['debug']['sentences_query'] = $sql;
                     
                     $stmt = $this->conn->prepare($sql);
@@ -672,9 +672,9 @@ class SearchService
                         $exists = in_array($sentence['ID'], array_column($sentenceMatches, 'id')); // Changed 'ID' to 'id' for the check key
                         
                         if (!$exists) {
-                            // First check if there's at least one row in matched_transcriptions with matching criteria and app_ready = 1
+                            // Check if there's at least one row in matched_transcriptions with matching criteria
                             $hasMatchedTranscription = false;
-                            $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'zin' AND added = '1' AND app_ready = 1 LIMIT 1");
+                            $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg = 'zin' AND added = '1' LIMIT 1");
                             if ($checkStmt) {
                                 $checkStmt->bind_param("i", $sentence['ID']);
                                 if ($checkStmt->execute()) {
@@ -770,11 +770,11 @@ class SearchService
                 $exists = in_array($form['id'], array_column($formMatches, 'id'));
 
                 if (!$exists) {
-                    // Check if there are any videos associated with this form and app_ready = 1
+                    // Check if there are any videos associated with this form
                     $hasAppReadyVideos = false;
-                    
-                    // Check matched_transcriptions for app_ready status
-                    $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg IN ('glos', 'extern', 'labels') AND app_ready = 1 AND added = '1' LIMIT 1");
+
+                    // Check matched_transcriptions for videos
+                    $checkStmt = $this->conn->prepare("SELECT 1 FROM matched_transcriptions WHERE m_transcription = ? AND zOg IN ('glos', 'extern', 'labels') AND added = '1' LIMIT 1");
                     if ($checkStmt) {
                         $checkStmt->bind_param("i", $form['id']);
                         if ($checkStmt->execute()) {

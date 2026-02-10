@@ -14,6 +14,9 @@ RewriteCond %{REQUEST_URI} !/getZinnen\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/getZinnenThemas\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/getZinnenVideos\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/getResolvedId\.php$ [NC]
+RewriteCond %{REQUEST_URI} !/getListGlos\.php$ [NC]
+RewriteCond %{REQUEST_URI} !/getListZin\.php$ [NC]
+RewriteCond %{REQUEST_URI} !/getListZinVideos\.php$ [NC]
 RewriteCond %{REQUEST_URI} !/admin/ [NC]
 RewriteCond %{REQUEST_URI} !/submit\.php$ [NC] # If submit.php needs to be directly accessible
 RewriteRule ^(.*)\.php$ /$1 [R=301,L]
@@ -37,6 +40,15 @@ RewriteRule ^suggestions$ index.php [L,QSA]
 
 # Route for ID resolver: /getResolvedId
 RewriteRule ^getResolvedId$ getResolvedId.php [L,QSA]
+
+# Route for list glosses by label: /list/{label}/glos
+RewriteRule ^list/([^/]+)/glos$ getListGlos.php?label=$1 [L,QSA]
+
+# Route for list sentences by label: /list/{label}/zin
+RewriteRule ^list/([^/]+)/zin$ getListZin.php?label=$1 [L,QSA]
+
+# Route for list sentence videos: /list/zin/videos
+RewriteRule ^list/zin/videos$ getListZinVideos.php [L,QSA]
 
 # Standard front controller, if not already handled by specific rules
 # This will pass the request to index.php, which can then parse the path if needed.
