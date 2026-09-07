@@ -1,4 +1,9 @@
 <?php
+
+// signcollect-lib's install-root resolver: sc_path(), sc_dir(), sc_root().
+// Vendored shim - it finds /web/lib/paths.php, or falls back to /web.
+require_once __DIR__ . '/../sc_paths.php';
+
 // Load configuration
 require_once '../src/config/config.php';
 require_once '../src/config/SecurityHeaders.php';
@@ -11,7 +16,7 @@ SecurityHeaders::setHeaders();
 ErrorReporting::configure();
 
 // Include database configuration
-include '/web/mysql_config.php';
+include sc_path('mysql_config.php');
 
 // Database-based authentication check
 session_start();
