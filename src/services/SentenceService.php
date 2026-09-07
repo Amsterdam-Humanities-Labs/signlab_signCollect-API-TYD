@@ -1,4 +1,9 @@
 <?php
+
+// signcollect-lib's install-root resolver: sc_path(), sc_dir(), sc_root().
+// Vendored shim - it finds /web/lib/paths.php, or falls back to /web.
+require_once __DIR__ . '/../../sc_paths.php';
+
 /**
  * Service for handling sentence data
  */
@@ -166,7 +171,7 @@ class SentenceService
         }
 
         // Determine last_modified from mp4 video file timestamps
-        $videoDir = '/web/gebarenoverleg_media/studioFilesMini/post/';
+        $videoDir = sc_dir('media_post');
         $lastModified = null;
         foreach (['videoLeft', 'videoCenter', 'videoRight'] as $videoKey) {
             if (!empty($sentence['videos'][$videoKey])) {
