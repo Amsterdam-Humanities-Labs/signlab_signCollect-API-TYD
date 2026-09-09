@@ -2,6 +2,123 @@
 
 The SignCollect API provides access to a collection of sign language videos, glosses, and sentences.
 
+It is the public, read-only face of the SignCollect corpus: one PHP front
+controller (`index.php`) plus a handful of single-purpose endpoints, backed by
+the services in `src/services/`. There is no framework, no build step and no
+Composer dependency — Apache, PHP and mysqli are the whole runtime.
+
+## What it does
+
+`index.php` handles search and autocomplete across sentences, words and
+glosses; the `get*.php` endpoints beside it each answer one question (videos
+for an entity, themes, glosses in a theme, a random video, id resolution, the
+label lists). Each one loads only the services it needs, queries
+`admin_gebarenoverleg` directly over mysqli, and returns JSON. Two endpoints
+cache to `cache/` on disk (`themas.json`, `random_video.json`, the latter for
+24 hours) because their answers change on the order of days, not requests.
+
+`admin/` is a small session-less admin page for toggling a video's
+`app_ready` status; it is the one part of this repository that writes.
+
+## Where it runs
+
+The **signcollect core server** (the production VPS), at `/web/zin/api`.
+
+That single directory answers to two names, which is worth stating plainly
+because it explains most of what is odd about this repository:
+
+- `https://api.signcollect.nl` — its own vhost, whose DocumentRoot is that
+  directory. This is the public API and what the `.htaccess` rewrite rules in
+  this repo are written for.
+- `https://signcollect.nl/zin/api/…` — the same files reached through the main
+  site, because they physically sit inside the `zin` docroot directory.
+
+On the demo hosts (`dev2`, docroot `/web`; `dev-1`, docroot
+`/srv/signcollect/web`) `Alias /api → <docroot>/zin/api` reproduces the first
+name, but **the directory is left empty** — see Deployment.
+
+## Status
+
+**Production.** `api.signcollect.nl` is live and has external consumers.
+
+The repository root is not tidy: roughly forty `test_*.php` / `check_*.php`
+one-off investigation scripts sit beside the endpoints, along with their
+`.log` and `.json` output. The maintained suite is `tests/` (`php
+tests/TestRunner.php`); the root-level scripts are development scratch and
+should not be taken as fixtures.
+
+## The `zin/api` submodule arrangement
+
+`signlab_zin` records `api` as a **gitlink** — a tree entry of mode `160000`
+pinned at one sCAPI commit — but it carries **no `.gitmodules` file**. That
+combination has consequences worth knowing before you touch either repo:
+
+- Git knows a commit belongs at `zin/api`, but not where to fetch it from.
+  `git submodule update --init` inside a `signlab_zin` checkout does nothing,
+  and `git clone` leaves `zin/api/` as an empty directory.
+- The pin is not the tip. As of writing, `signlab_zin` points at sCAPI
+  `9c33848` while `main` here is two commits ahead. Nothing updates the pin
+  automatically, and nothing on any host reads it.
+- On production the directory is a **real, independently maintained checkout**
+  of this repository that happens to live inside zin's tree. The deploy
+  toolchain knows this: `interface_deploy/scripts/host-bootstrap.sh` adds an
+  anchored `/api/` to zin's `git clean` keep-list precisely so that redeploying
+  zin does not delete a working API.
+
+So: treat `zin/api` as a mount point, not as a submodule. Clone this repository
+directly when you want to work on it; do not expect a `signlab_zin` clone to
+bring it along.
+
+## Deployment
+
+**Not deployed by `repos.tsv`.** The deploy toolchain in
+`signlab_signcollect-stack`'s `interface_deploy/` lists the git-backed docroot
+components in `scripts/repos.tsv`, and sCAPI is deliberately absent — its
+comment header says so. A demo is an *interface* deploy; `api.signcollect.nl`
+is a separate service with its own vhost and its own consumers, and is out of
+scope for it. `scripts/verify.sh` asserts that state rather than working
+around it, and `scripts/host-config.sh` creates `<docroot>/zin/api` with a
+`mysql_config.php` symlink into it so that anything later placed there resolves
+its credentials.
+
+One demo-visible consequence is recorded in `verify.sh`: `/zin/api/getSamVideos.php`
+is called from two places in the interface and does not work on a demo host.
+
+TODO: confirm how production's `/web/zin/api` checkout is actually updated —
+whether by hand (`git pull` on the host) or by a script that is not in
+`interface_deploy/`.
+
+## Configuration
+
+Nothing host-specific is in git.
+
+| File | Where it comes from |
+|---|---|
+| `mysql_config.php` | Not here. Endpoints `include '../../mysql_config.php'`, i.e. `<docroot>/mysql_config.php` — one shared credentials file for the whole docroot. `mysql_config.example.php` is the template; the real file is gitignored and Apache is configured to deny it over HTTP. |
+| `mysql_config_test.php` | Same directory, for the test database. `getRandomVideo.php` includes this one rather than the production config. TODO: confirm whether that is deliberate or a leftover. |
+| `API_ENVIRONMENT` | Environment variable read by `src/config/config.php`; `DEV` (the default) or `PROD`. `DEV` adds a `debug` block to responses and relaxes error reporting. |
+| `cache/` | Runtime cache. Two files are currently tracked in git; deleting either is safe, they repopulate on the next request. |
+
+`sc_paths.php` is the vendored `signcollect-lib` install-root resolver — a
+byte-identical copy of `consumer/sc_paths.php` in `signlab_signcollect-lib`.
+Do not edit it here; edit the library's copy and re-vendor. `admin/api.php` and
+`SentenceService` resolve their paths through it, so a host whose docroot is
+not `/web` works; the older `include '../../…'` call sites do not, and rely on
+the checkout sitting two levels below the docroot root.
+
+## Dependencies
+
+- **MySQL `admin_gebarenoverleg`** on the same host — `sentences`, `form_data`,
+  `sb_records` (the Signbank mirror), `matched_transcriptions`, `hh_words`,
+  `themas`. Read-only except for `admin/`.
+- **`media.signcollect.nl`** — every video and subtitle URL in a response is
+  built from `MEDIA_BASE_URL` / `SUBTITLE_BASE_URL` in `src/config/config.php`.
+  This API serves URLs, never bytes.
+- **`signlab_signcollect-lib`** — via the vendored `sc_paths.php` shim.
+- **`signlab_zin`** — a filesystem neighbour, not a code dependency: this
+  checkout lives at `zin/api` and shares the docroot's `mysql_config.php`.
+  See the submodule section above.
+
 ## Base URL
 
 `https://api.signcollect.nl`
