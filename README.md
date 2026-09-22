@@ -38,7 +38,8 @@ php tests/TestRunner.php          # maintained test suite
 - Not deployed by `interface_deploy` (`repos.tsv` leaves it out on purpose). Clone this repo directly.
 - `signlab_zin` has a gitlink at `api` with no `.gitmodules`. Treat `zin/api` as a mount point: on production it is a separate checkout, and zin's `git clean` keep-list protects `/api/`.
 - TODO: how production's `/web/zin/api` checkout gets updated (by hand or by a script) is not documented.
-- Admin first-time setup: run `admin/migrate.sql` (or `admin/setup.php`) to add `tyd_app_ready`.
+- Admin first-time setup: run `admin/migrate.sql` (or `php admin/setup.php`; over HTTP it needs a portal admin session) to add `tyd_app_ready`.
+- PHP errors are logged, not displayed (`.htaccess`).
 
 ## Configuration
 | Item | Notes |
