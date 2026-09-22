@@ -4,6 +4,28 @@
  * Checks and creates necessary database columns
  */
 
+// Over HTTP this runs ALTER TABLE, so only an admin may call it. The session
+// is the portal's (login_sc.php): signCollect-v2's verifier, which reads the
+// role from the users table. From the CLI (php setup.php) no session applies.
+if (PHP_SAPI !== 'cli') {
+    require_once __DIR__ . '/../sc_paths.php';
+    $sc_session_lib = sc_path('menu_beta/php_api/session.php');
+    if (is_readable($sc_session_lib)) {
+        // db.php first, at top level: its mysql_config globals must be global.
+        require_once dirname($sc_session_lib) . '/db.php';
+        require_once $sc_session_lib;
+    } else {
+        error_log('sCAPI admin/setup.php: ' . $sc_session_lib . ' missing - refusing');
+    }
+    unset($sc_session_lib);
+    if (!function_exists('session_is_admin') || !session_is_admin()) {
+        http_response_code(403);
+        header('Content-Type: text/plain; charset=utf-8');
+        exit("Admin session required.\n");
+    }
+    header('Content-Type: text/plain; charset=utf-8');
+}
+
 // Include database configuration
 include '../../mysql_config_test.php';
 
