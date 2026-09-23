@@ -1,4 +1,4 @@
-# signlab_sCAPI
+# signlab_signCollect-API-TYD
 The public JSON API over the SignCollect corpus (`api.signcollect.nl`). It is read-only apart from two small write paths.
 
 ## What it does
