@@ -14,7 +14,7 @@ Guidance for Claude Code in this repo. Endpoints, hosting and config: see `READM
 - `admin/`: `index.html` + `js/app.js` front end, `api.php` backend (session login against `users`).
 
 ## Behaviour to keep
-- `app_ready` filtering is disabled on purpose in `SentenceService` and `NmmService` (ZIN annotation needs work-in-progress videos).
+- `app_ready` filtering is disabled on purpose in `SentenceService` and `NmmService` (the sentence annotation tool in signlab_zinnen-annotation needs work-in-progress videos).
 - When `form_data` and `nmm_data` share a `glos`, `form_data` wins.
 - Response keys: `id` and `zinstring` are lowercase; everything else keeps its historical name.
 
