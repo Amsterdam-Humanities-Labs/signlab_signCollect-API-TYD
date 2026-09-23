@@ -36,7 +36,7 @@ Routing is in `.htaccess`. A direct `.php` request for a file not on its allow-l
 php tests/TestRunner.php          # maintained test suite
 ```
 - The tests query a real database through `<docroot>/mysql_config_test.php`.
-- `interface_deploy` checks this repo out into `zin/api` as its own component (a row in `repos.tsv`). `signlab_zin` ignores `api/`.
+- `interface_deploy` checks this repo out into `zin/api` as its own component (a row in `repos.tsv`). `signlab_zinnen-annotation` ignores `api/`.
 - Core server: the owner updates `/web/zin/api` by hand with `git pull`. See [production.md](https://github.com/Amsterdam-Humanities-Labs/signlab_signcollect-stack/blob/main/docs/production.md).
 - First-time admin setup: run `admin/migrate.sql` to add `tyd_app_ready`. Or run `php admin/setup.php`; over HTTP it needs a portal admin session.
 - PHP errors are logged, not shown (set in `.htaccess`).
@@ -55,5 +55,5 @@ php tests/TestRunner.php          # maintained test suite
 - MySQL database `admin_gebarenoverleg`: `sentences`, `form_data`, `sb_records`, `nmm_data`, `matched_transcriptions`, `hh_words`, `themas`, `users`, `form_submissions`.
 - `media.signcollect.nl` for all media URLs.
 - [signlab_signcollect-lib](https://github.com/Amsterdam-Humanities-Labs/signlab_signcollect-lib) (copied `sc_paths.php`).
-- [signlab_zin](https://github.com/Amsterdam-Humanities-Labs/signlab_zin): this API lives at `zin/api` and shares the docroot config.
+- [signlab_zinnen-annotation](https://github.com/Amsterdam-Humanities-Labs/signlab_zinnen-annotation): this API lives at `zin/api` and shares the docroot config.
 - Deploy and stack overview: [signlab_signcollect-stack](https://github.com/Amsterdam-Humanities-Labs/signlab_signcollect-stack).
